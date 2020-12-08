@@ -1,14 +1,4 @@
-bazel-*
-.ijwb/
-java_formatter.jar
-
-# Visual Studio Code
-/.vscode/
-
-# IntelliJ IDEA
-/.idea/
-*.iml
-
-# Eclipse
-/.project
-/.classpath
+_site
+.sass-cache
+.jekyll-cache
+.jekyll-metadata
