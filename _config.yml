@@ -15,8 +15,8 @@
 # in the templates via {{ site.myvariable }}.
 title: Buildfarm
 description: Remote Execution for Bazel
-baseurl: "/unilang" # the subpath of your site, e.g. /blog
-url: "http://luxe.github.io" # the base hostname & protocol for your site, e.g. http://example.com
+baseurl: "/bazel-buildfarm" # the subpath of your site, e.g. /blog
+url: "http://bazelbuild.github.io" # the base hostname & protocol for your site, e.g. http://example.com
 
 permalink: pretty
 exclude: ["node_modules/", "*.gemspec", "*.gem", "Gemfile", "Gemfile.lock", "package.json", "package-lock.json",  "script/", "LICENSE.txt", "lib/", "bin/", "README.md", "Rakefile"
