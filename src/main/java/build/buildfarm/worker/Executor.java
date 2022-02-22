@@ -405,6 +405,15 @@ class Executor {
       boolean isDefaultTimeout,
       ActionResult.Builder resultBuilder)
       throws IOException, InterruptedException {
+
+    boolean usePersistentWorker = limits.unusedProperties.containsKey("persistentWorkerKey");
+
+    if(usePersistentWorker) {
+      System.out.println("usePersistentWorker");
+    } else {
+      System.out.println("don't usePersistentWorker");
+    }
+
     ProcessBuilder processBuilder =
         new ProcessBuilder(arguments).directory(execDir.toAbsolutePath().toFile());
 
@@ -438,6 +447,11 @@ class Executor {
     }
 
     long startNanoTime = System.nanoTime();
+
+    if (usePersistentWorker) {
+      makePersistentWorker();
+    }
+
     Process process;
     try {
       synchronized (execLock) {
