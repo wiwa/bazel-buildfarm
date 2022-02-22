@@ -101,6 +101,7 @@ public class MatchStage extends PipelineStage {
 
     @SuppressWarnings("SameReturnValue")
     private boolean onOperationPolled() throws InterruptedException {
+      System.out.println("onOperationPolled");
       String operationName = operationContext.queueEntry.getExecuteEntry().getOperationName();
       logStart(operationName);
 

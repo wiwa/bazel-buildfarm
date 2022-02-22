@@ -145,6 +145,11 @@ class Executor {
       isDefaultTimeout = true;
     }
 
+    System.out.println("runInterruptible's command:");
+    System.out.println(operationContext.command);
+    System.out.println("runInterruptible's queueEntry:");
+    System.out.println(operationContext.queueEntry);
+
     if (timeout == null && workerContext.hasDefaultActionTimeout()) {
       timeout = workerContext.getDefaultActionTimeout();
     }
@@ -276,10 +281,12 @@ class Executor {
     long executeUSecs = stopwatch.elapsed(MICROSECONDS);
 
     logger.log(
-        Level.FINE,
+        Level.INFO,
         String.format(
             "Executor::executeCommand(%s): Completed command: exit code %d",
             operationName, resultBuilder.getExitCode()));
+
+    System.out.println("my thingy!");
 
     operationContext.executeResponse.getStatusBuilder().setCode(statusCode.getNumber());
     OperationContext reportOperationContext =

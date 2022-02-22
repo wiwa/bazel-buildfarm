@@ -225,6 +225,8 @@ class Extract {
 
       void handleDirectory(Directory directory) {
         for (FileNode fileNode : directory.getFilesList()) {
+          System.out.println("handleDirectory (nodeprops:): " + directory.getNodeProperties());
+          System.out.println(fileNode.getNodeProperties());
           Digest fileDigest = fileNode.getDigest();
           if (!visitedDigests.contains(fileDigest)) {
             visitedDigests.add(fileDigest);

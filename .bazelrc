@@ -1,1 +1,5 @@
-build:fuse --define=fuse=true
+#build:fuse --define=fuse=true
+
+build:remote --remote_executor=grpc://localhost:8980
+build:remote --spawn_strategy=worker,sandboxed,local
+build:remote --strategy=Javac=remote

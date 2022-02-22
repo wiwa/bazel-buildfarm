@@ -66,12 +66,22 @@ public class ExecutionPropertiesParser {
     parser.put(
         ExecutionProperties.DEBUG_TESTS_ONLY, ExecutionPropertiesParser::storeDebugTestsOnly);
     parser.put(ExecutionProperties.DEBUG_TARGET, ExecutionPropertiesParser::storeDebugTarget);
-
+    // TODO get persistent-worker flag and toolinputs from `bazel_tools` key.
+    // might have to use command.getOutputNodeProperties
+    // Can just println Command at first to see what its like! 
     ResourceLimits limits = new ResourceLimits();
     command
         .getPlatform()
         .getPropertiesList()
         .forEach((property) -> evaluateProperty(parser, limits, property));
+    System.out.println("RLS");
+    for (Map.Entry<String, String> kv : limits.unusedProperties.entrySet()) {
+      System.out.println(kv.getKey() + ":" + kv.getValue());
+    }
+    System.out.println("getOutputNodePropertiesList");
+    for (String npstr : command.getOutputNodePropertiesList()) {
+      System.out.println(npstr);
+    }
     return limits;
   }
 

@@ -158,6 +158,9 @@ public class ContentAddressableStorageService
 
     while (iter.hasNext() && pageSize != 0) {
       Directory directory = iter.next().getDirectory();
+      System.out.println("CAS directory (iter) " + directory.getNodeProperties());
+      System.out.println("CAS directory's files (iter) ");
+      directory.getFilesList().forEach(f -> System.out.println(f.getNodeProperties()));
       // If part of the tree is missing from the CAS, the server will return the
       // portion present and omit the rest.
       if (directory != null) {
