@@ -14,11 +14,29 @@
 
 package build.buildfarm.worker;
 
-import static build.buildfarm.v1test.ExecutionPolicy.PolicyCase.WRAPPER;
-import static com.google.common.collect.Maps.uniqueIndex;
-import static java.lang.String.format;
-import static java.util.concurrent.TimeUnit.DAYS;
-import static java.util.concurrent.TimeUnit.MICROSECONDS;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import com.google.common.base.Stopwatch;
+import com.google.common.collect.ImmutableList;
+import com.google.devtools.build.lib.shell.Protos.ExecutionStatistics;
+import com.google.devtools.build.lib.worker.WorkerProtocol;
+import com.google.longrunning.Operation;
+import com.google.protobuf.Any;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.Duration;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.util.Timestamps;
+import com.google.rpc.Code;
 
 import build.bazel.remote.execution.v2.ActionResult;
 import build.bazel.remote.execution.v2.Command;
@@ -33,27 +51,15 @@ import build.buildfarm.v1test.ExecutionPolicy;
 import build.buildfarm.v1test.ExecutionWrapper;
 import build.buildfarm.worker.WorkerContext.IOResource;
 import build.buildfarm.worker.resources.ResourceLimits;
-import com.google.common.base.Stopwatch;
-import com.google.common.collect.ImmutableList;
-import com.google.devtools.build.lib.shell.Protos.ExecutionStatistics;
-import com.google.longrunning.Operation;
-import com.google.protobuf.Any;
-import com.google.protobuf.ByteString;
-import com.google.protobuf.Duration;
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.util.Timestamps;
-import com.google.rpc.Code;
 import io.grpc.Deadline;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+
+import static java.lang.String.format;
+import static java.util.concurrent.TimeUnit.DAYS;
+import static java.util.concurrent.TimeUnit.MICROSECONDS;
+
+import static com.google.common.collect.Maps.uniqueIndex;
+
+import static build.buildfarm.v1test.ExecutionPolicy.PolicyCase.WRAPPER;
 
 class Executor {
   private static final int INCOMPLETE_EXIT_CODE = -1;
@@ -68,7 +74,8 @@ class Executor {
   private boolean wasErrored = false;
 
   Executor(
-      WorkerContext workerContext, OperationContext operationContext, ExecuteActionStage owner) {
+      WorkerContext workerContext, OperationContext operationContext, ExecuteActionStage owner
+  ) {
     this.workerContext = workerContext;
     this.operationContext = operationContext;
     this.owner = owner;
@@ -145,6 +152,11 @@ class Executor {
       isDefaultTimeout = true;
     }
 
+    System.out.println("runInterruptible's command:");
+    System.out.println(operationContext.command);
+    System.out.println("runInterruptible's queueEntry:");
+    System.out.println(operationContext.queueEntry);
+
     if (timeout == null && workerContext.hasDefaultActionTimeout()) {
       timeout = workerContext.getDefaultActionTimeout();
     }
@@ -180,7 +192,8 @@ class Executor {
       Iterable<ExecutionPolicy> policies,
       Duration timeout,
       boolean isDefaultTimeout,
-      Stopwatch stopwatch)
+      Stopwatch stopwatch
+  )
       throws InterruptedException {
     /* execute command */
     logger.log(Level.FINE, "Executor: Operation " + operation.getName() + " Executing command");
@@ -201,8 +214,8 @@ class Executor {
     ImmutableList.Builder<String> arguments = ImmutableList.builder();
     Code statusCode;
     try (IOResource resource =
-        workerContext.limitExecution(
-            operationName, arguments, operationContext.command, workingDirectory)) {
+             workerContext.limitExecution(
+                 operationName, arguments, operationContext.command, workingDirectory)) {
       for (ExecutionPolicy policy : policies) {
         if (policy.getPolicyCase() == WRAPPER) {
           arguments.addAll(transformWrapper(policy.getWrapper()));
@@ -267,7 +280,8 @@ class Executor {
         "Executor(claim)",
         operationContext.queueEntry,
         ExecutionStage.Value.EXECUTING,
-        () -> {},
+        () -> {
+        },
         Deadline.after(10, DAYS));
 
     resultBuilder
@@ -276,10 +290,12 @@ class Executor {
     long executeUSecs = stopwatch.elapsed(MICROSECONDS);
 
     logger.log(
-        Level.FINE,
+        Level.INFO,
         String.format(
             "Executor::executeCommand(%s): Completed command: exit code %d",
             operationName, resultBuilder.getExitCode()));
+
+    System.out.println("my thingy!");
 
     operationContext.executeResponse.getStatusBuilder().setCode(statusCode.getNumber());
     OperationContext reportOperationContext =
@@ -396,8 +412,18 @@ class Executor {
       ResourceLimits limits,
       Duration timeout,
       boolean isDefaultTimeout,
-      ActionResult.Builder resultBuilder)
+      ActionResult.Builder resultBuilder
+  )
       throws IOException, InterruptedException {
+
+    boolean usePersistentWorker = limits.unusedProperties.containsKey("persistentWorkerKey");
+
+    if (usePersistentWorker) {
+      System.out.println("usePersistentWorker");
+    } else {
+      System.out.println("don't usePersistentWorker");
+    }
+
     ProcessBuilder processBuilder =
         new ProcessBuilder(arguments).directory(execDir.toAbsolutePath().toFile());
 
@@ -431,114 +457,145 @@ class Executor {
     }
 
     long startNanoTime = System.nanoTime();
-    Process process;
-    try {
-      synchronized (execLock) {
-        process = processBuilder.start();
+
+    ByteString responseBytes = null;
+    if (usePersistentWorker) {
+      try {
+        synchronized (execLock) {
+          int indexOfPersistentJar = arguments.indexOf("-jar") + 1;
+          List<String> persistentProcessStartCmd = new ArrayList<>(
+              arguments.subList(0, indexOfPersistentJar + 1));
+          Process ppro = ExecutorPersistent.makePersistentProcess(execDir.toAbsolutePath().toFile(),
+              persistentProcessStartCmd);
+
+          List<String> workArgs = new ArrayList<>(
+              arguments.subList(indexOfPersistentJar + 1, arguments.size()));
+          WorkerProtocol.WorkRequest req = ExecutorPersistent.createWorkRequest(workArgs);
+
+          WorkerProtocol.WorkResponse resp = ExecutorPersistent.execOnWorker(ppro, req);
+          responseBytes = resp.getOutputBytes();
+        }
+      } catch (IOException e) {
+        System.out.println("IOException: " + e.getMessage());
+        return Code.UNKNOWN;
       }
-      process.getOutputStream().close();
-    } catch (IOException e) {
-      logger.log(Level.SEVERE, format("error starting process for %s", operationName), e);
-      // again, should we do something else here??
-      resultBuilder.setExitCode(INCOMPLETE_EXIT_CODE);
-      // The openjdk IOException for an exec failure here includes the working
-      // directory of the execution. Drop it and reconstruct without it if we
-      // can get the cause.
-      Throwable t = e.getCause();
-      String message;
-      if (t != null) {
-        message =
-            "Cannot run program \"" + processBuilder.command().get(0) + "\": " + t.getMessage();
-      } else {
-        message = e.getMessage();
+
+
+      resultBuilder
+        .setExitCode(0)
+        .setStdoutRaw(responseBytes)
+        .setStderrRaw(ByteString.EMPTY);
+      return Code.OK;
+    } else {
+      Process process;
+      try {
+        synchronized (execLock) {
+          process = processBuilder.start();
+        }
+        process.getOutputStream().close();
+      } catch (IOException e) {
+        logger.log(Level.SEVERE, format("error starting process for %s", operationName), e);
+        // again, should we do something else here??
+        resultBuilder.setExitCode(INCOMPLETE_EXIT_CODE);
+        // The openjdk IOException for an exec failure here includes the working
+        // directory of the execution. Drop it and reconstruct without it if we
+        // can get the cause.
+        Throwable t = e.getCause();
+        String message;
+        if (t != null) {
+          message =
+              "Cannot run program \"" + processBuilder.command().get(0) + "\": " + t.getMessage();
+        } else {
+          message = e.getMessage();
+        }
+        resultBuilder.setStderrRaw(ByteString.copyFromUtf8(message));
+        return Code.INVALID_ARGUMENT;
       }
-      resultBuilder.setStderrRaw(ByteString.copyFromUtf8(message));
-      return Code.INVALID_ARGUMENT;
-    }
 
-    stdoutWrite.reset();
-    stderrWrite.reset();
-    ByteStringWriteReader stdoutReader =
-        new ByteStringWriteReader(
-            process.getInputStream(), stdoutWrite, (int) workerContext.getStandardOutputLimit());
-    ByteStringWriteReader stderrReader =
-        new ByteStringWriteReader(
-            process.getErrorStream(), stderrWrite, (int) workerContext.getStandardErrorLimit());
+      stdoutWrite.reset();
+      stderrWrite.reset();
+      ByteStringWriteReader stdoutReader =
+          new ByteStringWriteReader(
+              process.getInputStream(), stdoutWrite, (int) workerContext.getStandardOutputLimit());
+      ByteStringWriteReader stderrReader =
+          new ByteStringWriteReader(
+              process.getErrorStream(), stderrWrite, (int) workerContext.getStandardErrorLimit());
 
-    Thread stdoutReaderThread = new Thread(stdoutReader);
-    Thread stderrReaderThread = new Thread(stderrReader);
-    stdoutReaderThread.start();
-    stderrReaderThread.start();
+      Thread stdoutReaderThread = new Thread(stdoutReader);
+      Thread stderrReaderThread = new Thread(stderrReader);
+      stdoutReaderThread.start();
+      stderrReaderThread.start();
 
-    Code statusCode = Code.OK;
-    boolean processCompleted = false;
-    try {
-      if (timeout == null) {
-        exitCode = process.waitFor();
-        processCompleted = true;
-      } else {
-        long timeoutNanos = timeout.getSeconds() * 1000000000L + timeout.getNanos();
-        long remainingNanoTime = timeoutNanos - (System.nanoTime() - startNanoTime);
-        if (process.waitFor(remainingNanoTime, TimeUnit.NANOSECONDS)) {
-          exitCode = process.exitValue();
+      Code statusCode = Code.OK;
+      boolean processCompleted = false;
+      try {
+        if (timeout == null) {
+          exitCode = process.waitFor();
           processCompleted = true;
         } else {
-          logger.log(
-              Level.INFO,
-              format(
-                  "process timed out for %s after %ds with %s timeout",
-                  operationName, timeout.getSeconds(), isDefaultTimeout ? "default" : "action"));
-          statusCode = Code.DEADLINE_EXCEEDED;
+          long timeoutNanos = timeout.getSeconds() * 1000000000L + timeout.getNanos();
+          long remainingNanoTime = timeoutNanos - (System.nanoTime() - startNanoTime);
+          if (process.waitFor(remainingNanoTime, TimeUnit.NANOSECONDS)) {
+            exitCode = process.exitValue();
+            processCompleted = true;
+          } else {
+            logger.log(
+                Level.INFO,
+                format(
+                    "process timed out for %s after %ds with %s timeout",
+                    operationName, timeout.getSeconds(), isDefaultTimeout ? "default" : "action"));
+            statusCode = Code.DEADLINE_EXCEEDED;
+          }
+        }
+      } finally {
+        if (!processCompleted) {
+          process.destroy();
+          int waitMillis = 1000;
+          while (!process.waitFor(waitMillis, TimeUnit.MILLISECONDS)) {
+            logger.log(
+                Level.INFO,
+                format("process did not respond to termination for %s, killing it", operationName));
+            process.destroyForcibly();
+            waitMillis = 100;
+          }
         }
       }
-    } finally {
-      if (!processCompleted) {
-        process.destroy();
-        int waitMillis = 1000;
-        while (!process.waitFor(waitMillis, TimeUnit.MILLISECONDS)) {
-          logger.log(
-              Level.INFO,
-              format("process did not respond to termination for %s, killing it", operationName));
-          process.destroyForcibly();
-          waitMillis = 100;
+      stdoutReaderThread.join();
+      stderrReaderThread.join();
+
+      try {
+        resultBuilder
+            .setExitCode(exitCode)
+            .setStdoutRaw(stdoutReader.getData())
+            .setStderrRaw(stderrReader.getData());
+      } catch (IOException e) {
+        if (statusCode != Code.DEADLINE_EXCEEDED) {
+          throw e;
         }
-      }
-    }
-    stdoutReaderThread.join();
-    stderrReaderThread.join();
-
-    try {
-      resultBuilder
-          .setExitCode(exitCode)
-          .setStdoutRaw(stdoutReader.getData())
-          .setStderrRaw(stderrReader.getData());
-    } catch (IOException e) {
-      if (statusCode != Code.DEADLINE_EXCEEDED) {
-        throw e;
-      }
-      logger.log(
-          Level.INFO,
-          format("error getting process outputs for %s after timeout", operationName),
-          e);
-    }
-
-    // allow debugging after an execution
-    if (limits.debugAfterExecution) {
-      // Obtain execution statistics recorded while the action executed.
-      // Currently we can only source this data when using the sandbox.
-      ExecutionStatistics executionStatistics = ExecutionStatistics.newBuilder().build();
-      if (limits.useLinuxSandbox) {
-        executionStatistics =
-            ExecutionStatistics.newBuilder()
-                .mergeFrom(
-                    new FileInputStream(execDir.resolve("action_execution_statistics").toString()))
-                .build();
+        logger.log(
+            Level.INFO,
+            format("error getting process outputs for %s after timeout", operationName),
+            e);
       }
 
-      return ExecutionDebugger.performAfterExecutionDebug(
-          processBuilder, exitCode, limits, executionStatistics, resultBuilder);
-    }
+      // allow debugging after an execution
+      if (limits.debugAfterExecution) {
+        // Obtain execution statistics recorded while the action executed.
+        // Currently we can only source this data when using the sandbox.
+        ExecutionStatistics executionStatistics = ExecutionStatistics.newBuilder().build();
+        if (limits.useLinuxSandbox) {
+          executionStatistics =
+              ExecutionStatistics.newBuilder()
+                  .mergeFrom(
+                      new FileInputStream(execDir.resolve("action_execution_statistics").toString()))
+                  .build();
+        }
 
-    return statusCode;
+        return ExecutionDebugger.performAfterExecutionDebug(
+            processBuilder, exitCode, limits, executionStatistics, resultBuilder);
+      }
+
+      return statusCode;
+    }
   }
 }

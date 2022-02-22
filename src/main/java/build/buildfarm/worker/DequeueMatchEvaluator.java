@@ -14,6 +14,9 @@
 
 package build.buildfarm.worker;
 
+import java.util.Collection;
+import java.util.Map;
+
 import build.bazel.remote.execution.v2.Command;
 import build.bazel.remote.execution.v2.Platform;
 import build.buildfarm.common.ExecutionProperties;
@@ -55,6 +58,14 @@ public class DequeueMatchEvaluator {
       DequeueMatchSettings matchSettings,
       SetMultimap<String, String> workerProvisions,
       QueueEntry queueEntry) {
+    System.out.println("shouldKeepOperation?");
+    for (Map.Entry<String, Collection<String>> kv : workerProvisions.asMap().entrySet()) {
+      System.out.println(kv.getKey() + ":" + kv.getValue());
+    }
+    System.out.println("platform properties:");
+    System.out.println(queueEntry.getPlatform().getPropertiesList());
+    System.out.println("unknown fields:");
+    System.out.println(queueEntry.getUnknownFields());
     return shouldKeepViaPlatform(matchSettings, workerProvisions, queueEntry.getPlatform());
   }
 

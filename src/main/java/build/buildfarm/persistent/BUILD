@@ -1,26 +1,36 @@
+
+java_binary(
+    name = "pworker",
+    main_class = "build.buildfarm.persistent.PersistentSpawnRunner",
+    visibility = ["//visibility:public"],
+    runtime_deps = [
+        "//src/main/java/build/buildfarm/persistent:persistent-worker",
+    ],
+)
+
+java_binary(
+    name = "example-worker",
+    main_class = "build.buildfarm.persistent.ExampleWorkerProcess",
+    visibility = ["//visibility:public"],
+    runtime_deps = [
+        "//src/main/java/build/buildfarm/persistent:persistent-worker",
+    ],
+)
+
 java_library(
-    name = "worker",
+    name = "persistent-worker",
     srcs = glob(["*.java"]),
     visibility = ["//visibility:public"],
     deps = [
         "//src/main/java/build/buildfarm/common",
+        "//src/main/java/build/buildfarm/common/redis",
         "//src/main/java/build/buildfarm/instance",
+        "//src/main/java/build/buildfarm/instance/shard",
         "//src/main/java/build/buildfarm/instance/stub",
-        "//src/main/java/build/buildfarm/persistent:persistent-worker",
-        "//src/main/java/build/buildfarm/worker/resources",
         "//src/main/protobuf:build_buildfarm_v1test_buildfarm_java_proto",
         "//third_party/bazel/src/main/protobuf:worker_protocol_java_proto",
-        "@bazel//src/main/protobuf:execution_statistics_java_proto",
-        "@googleapis//:google_rpc_code_java_proto",
-        "@googleapis//:google_rpc_error_details_java_proto",
-        "@maven//:com_github_jnr_jffi_native",
-        "@maven//:com_github_jnr_jnr_constants",
-        "@maven//:com_github_jnr_jnr_ffi",
-        "@maven//:com_github_jnr_jnr_posix",
+        "@maven//:org_apache_commons_commons_pool2",
         "@maven//:com_github_pcj_google_options",
-        "@maven//:com_github_serceman_jnr_fuse",
-        "@maven//:com_google_code_findbugs_jsr305",
-        "@maven//:com_google_code_gson_gson",
         "@maven//:com_google_guava_guava",
         "@maven//:com_google_protobuf_protobuf_java",
         "@maven//:com_google_protobuf_protobuf_java_util",
@@ -30,7 +40,5 @@ java_library(
         "@maven//:io_grpc_grpc_netty",
         "@maven//:io_grpc_grpc_protobuf",
         "@maven//:io_grpc_grpc_stub",
-        "@maven//:io_prometheus_simpleclient",
-        "@maven//:org_jetbrains_annotations",
     ],
 )

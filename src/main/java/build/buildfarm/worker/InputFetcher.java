@@ -28,17 +28,21 @@ import build.bazel.remote.execution.v2.DirectoryNode;
 import build.bazel.remote.execution.v2.ExecutedActionMetadata;
 import build.bazel.remote.execution.v2.FileNode;
 import build.buildfarm.common.DigestUtil;
+import build.buildfarm.common.TreeIterator;
 import build.buildfarm.v1test.QueuedOperation;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Iterables;
 import com.google.protobuf.Duration;
 import com.google.protobuf.util.Timestamps;
+
+import build.buildfarm.v1test.Tree;
 import io.grpc.Deadline;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 public class InputFetcher implements Runnable {
@@ -74,6 +78,8 @@ public class InputFetcher implements Runnable {
 
   private long runInterruptibly(Stopwatch stopwatch) throws InterruptedException {
     final Thread fetcherThread = Thread.currentThread();
+
+    System.out.println("InputFetcher.runInterruptibly");
     workerContext.resumePoller(
         operationContext.poller,
         "InputFetcher",
@@ -82,6 +88,7 @@ public class InputFetcher implements Runnable {
         fetcherThread::interrupt,
         Deadline.after(workerContext.getInputFetchDeadline(), SECONDS));
     try {
+      System.out.println("InputFetcher.runInterruptibly.fetchPolled");
       return fetchPolled(stopwatch);
     } finally {
       operationContext.poller.pause();
@@ -93,7 +100,18 @@ public class InputFetcher implements Runnable {
 
   static String getExecutablePath(
       String programPath, Directory root, Map<Digest, Directory> directoriesIndex) {
+
+    System.out.println("getExecutablePath1");
+    System.out.println("getExecutablePath2");
+    System.out.println("getExecutablePath3");
+    System.out.println("getExecutablePath4");
+
+    System.out.println(root.getNodeProperties());
+
+    root.getFilesList().forEach(f -> System.out.println(f.getNodeProperties()));
+
     if (!programPath.startsWith(BAZEL_HOST_BIN_PREFIX)) {
+      System.out.println("return programPath: " + programPath);
       return programPath;
     }
     Digest programDigest = pathDigest(programPath, root, directoriesIndex);
@@ -115,6 +133,8 @@ public class InputFetcher implements Runnable {
 
   static @Nullable Digest pathDigest(
       String path, Directory root, Map<Digest, Directory> directoriesIndex) {
+
+    System.out.println("pathDigest");
     Directory directory = root;
     String remaining = path;
     for (int index = remaining.indexOf('/'); index != -1; index = remaining.indexOf('/')) {
@@ -137,7 +157,10 @@ public class InputFetcher implements Runnable {
     if (remaining.isEmpty()) {
       return null;
     }
+
+    System.out.println("for (FileNode node : directory.getFilesList()");
     for (FileNode node : directory.getFilesList()) {
+      System.out.println(node.getNodeProperties());
       if (node.getIsExecutable() && remaining.equals(node.getName())) {
         return node.getDigest();
       }
@@ -202,6 +225,21 @@ public class InputFetcher implements Runnable {
             .addArguments(getExecutablePath(programName, root, directoriesIndex))
             .addAllArguments(Iterables.skip(queuedOperation.getCommand().getArgumentsList(), 1))
             .build();
+
+    System.out.println("queuedOp's tree");
+
+    queuedOperation.getTree().getDirectoriesMap().forEach( (name, d) -> {
+      System.out.println("directory: " + name);
+      System.out.println(d.getNodeProperties());
+      System.out.println("subfiles: ");
+      d.getFilesList().forEach(f -> {
+        System.out.println("filename: " + f.getName());
+        System.out.println("nodeprops:");
+        f.getNodeProperties().getPropertiesList().forEach(n -> {
+          System.out.println(n.getName() + " : " + n.getValue());
+        });
+      });
+    });
 
     executedAction.setInputFetchCompletedTimestamp(
         Timestamps.fromMillis(System.currentTimeMillis()));
