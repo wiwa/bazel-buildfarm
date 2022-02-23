@@ -27,7 +27,6 @@ java_library(
         "//src/main/java/build/buildfarm/instance",
         "//src/main/java/build/buildfarm/instance/shard",
         "//src/main/java/build/buildfarm/instance/stub",
-        "//src/main/java/build/buildfarm/worker/shard",
         "//src/main/protobuf:build_buildfarm_v1test_buildfarm_java_proto",
         "//third_party/bazel/src/main/protobuf:worker_protocol_java_proto",
         "@maven//:org_apache_commons_commons_pool2",
