@@ -458,132 +458,144 @@ class Executor {
 
     long startNanoTime = System.nanoTime();
 
-    Process process;
     ByteString responseBytes = null;
-    try {
-      if (usePersistentWorker) {
-        int indexOfPersistentJar = arguments.indexOf("-jar") + 1;
-        List<String> persistentProcessStartCmd = new ArrayList<>(arguments.subList(0, indexOfPersistentJar + 1));
-        Process ppro = ExecutorPersistent.makePersistentProcess(execDir.toAbsolutePath().toFile(), persistentProcessStartCmd);
+    if (usePersistentWorker) {
+      try {
+        synchronized (execLock) {
+          int indexOfPersistentJar = arguments.indexOf("-jar") + 1;
+          List<String> persistentProcessStartCmd = new ArrayList<>(
+              arguments.subList(0, indexOfPersistentJar + 1));
+          Process ppro = ExecutorPersistent.makePersistentProcess(execDir.toAbsolutePath().toFile(),
+              persistentProcessStartCmd);
 
-        List<String> workArgs = new ArrayList<>(arguments.subList(indexOfPersistentJar + 1, arguments.size()));
-        WorkerProtocol.WorkRequest req = ExecutorPersistent.createWorkRequest(workArgs);
+          List<String> workArgs = new ArrayList<>(
+              arguments.subList(indexOfPersistentJar + 1, arguments.size()));
+          WorkerProtocol.WorkRequest req = ExecutorPersistent.createWorkRequest(workArgs);
 
-        WorkerProtocol.WorkResponse resp = ExecutorPersistent.execOnWorker(ppro, req);
-        responseBytes = resp.getOutputBytes();
-      } else {
+          WorkerProtocol.WorkResponse resp = ExecutorPersistent.execOnWorker(ppro, req);
+          responseBytes = resp.getOutputBytes();
+        }
+      } catch (IOException e) {
+        System.out.println("IOException: " + e.getMessage());
+        return Code.UNKNOWN;
+      }
+
+
+      resultBuilder
+        .setExitCode(0)
+        .setStdoutRaw(responseBytes)
+        .setStderrRaw(ByteString.EMPTY);
+      return Code.OK;
+    } else {
+      Process process;
+      try {
         synchronized (execLock) {
           process = processBuilder.start();
         }
         process.getOutputStream().close();
+      } catch (IOException e) {
+        logger.log(Level.SEVERE, format("error starting process for %s", operationName), e);
+        // again, should we do something else here??
+        resultBuilder.setExitCode(INCOMPLETE_EXIT_CODE);
+        // The openjdk IOException for an exec failure here includes the working
+        // directory of the execution. Drop it and reconstruct without it if we
+        // can get the cause.
+        Throwable t = e.getCause();
+        String message;
+        if (t != null) {
+          message =
+              "Cannot run program \"" + processBuilder.command().get(0) + "\": " + t.getMessage();
+        } else {
+          message = e.getMessage();
+        }
+        resultBuilder.setStderrRaw(ByteString.copyFromUtf8(message));
+        return Code.INVALID_ARGUMENT;
       }
-    } catch (IOException e) {
-      logger.log(Level.SEVERE, format("error starting process for %s", operationName), e);
-      // again, should we do something else here??
-      resultBuilder.setExitCode(INCOMPLETE_EXIT_CODE);
-      // The openjdk IOException for an exec failure here includes the working
-      // directory of the execution. Drop it and reconstruct without it if we
-      // can get the cause.
-      Throwable t = e.getCause();
-      String message;
-      if (t != null) {
-        message =
-            "Cannot run program \"" + processBuilder.command().get(0) + "\": " + t.getMessage();
-      } else {
-        message = e.getMessage();
+
+      stdoutWrite.reset();
+      stderrWrite.reset();
+      ByteStringWriteReader stdoutReader =
+          new ByteStringWriteReader(
+              process.getInputStream(), stdoutWrite, (int) workerContext.getStandardOutputLimit());
+      ByteStringWriteReader stderrReader =
+          new ByteStringWriteReader(
+              process.getErrorStream(), stderrWrite, (int) workerContext.getStandardErrorLimit());
+
+      Thread stdoutReaderThread = new Thread(stdoutReader);
+      Thread stderrReaderThread = new Thread(stderrReader);
+      stdoutReaderThread.start();
+      stderrReaderThread.start();
+
+      Code statusCode = Code.OK;
+      boolean processCompleted = false;
+      try {
+        if (timeout == null) {
+          exitCode = process.waitFor();
+          processCompleted = true;
+        } else {
+          long timeoutNanos = timeout.getSeconds() * 1000000000L + timeout.getNanos();
+          long remainingNanoTime = timeoutNanos - (System.nanoTime() - startNanoTime);
+          if (process.waitFor(remainingNanoTime, TimeUnit.NANOSECONDS)) {
+            exitCode = process.exitValue();
+            processCompleted = true;
+          } else {
+            logger.log(
+                Level.INFO,
+                format(
+                    "process timed out for %s after %ds with %s timeout",
+                    operationName, timeout.getSeconds(), isDefaultTimeout ? "default" : "action"));
+            statusCode = Code.DEADLINE_EXCEEDED;
+          }
+        }
+      } finally {
+        if (!processCompleted) {
+          process.destroy();
+          int waitMillis = 1000;
+          while (!process.waitFor(waitMillis, TimeUnit.MILLISECONDS)) {
+            logger.log(
+                Level.INFO,
+                format("process did not respond to termination for %s, killing it", operationName));
+            process.destroyForcibly();
+            waitMillis = 100;
+          }
+        }
       }
-      resultBuilder.setStderrRaw(ByteString.copyFromUtf8(message));
-      return Code.INVALID_ARGUMENT;
+      stdoutReaderThread.join();
+      stderrReaderThread.join();
+
+      try {
+        resultBuilder
+            .setExitCode(exitCode)
+            .setStdoutRaw(stdoutReader.getData())
+            .setStderrRaw(stderrReader.getData());
+      } catch (IOException e) {
+        if (statusCode != Code.DEADLINE_EXCEEDED) {
+          throw e;
+        }
+        logger.log(
+            Level.INFO,
+            format("error getting process outputs for %s after timeout", operationName),
+            e);
+      }
+
+      // allow debugging after an execution
+      if (limits.debugAfterExecution) {
+        // Obtain execution statistics recorded while the action executed.
+        // Currently we can only source this data when using the sandbox.
+        ExecutionStatistics executionStatistics = ExecutionStatistics.newBuilder().build();
+        if (limits.useLinuxSandbox) {
+          executionStatistics =
+              ExecutionStatistics.newBuilder()
+                  .mergeFrom(
+                      new FileInputStream(execDir.resolve("action_execution_statistics").toString()))
+                  .build();
+        }
+
+        return ExecutionDebugger.performAfterExecutionDebug(
+            processBuilder, exitCode, limits, executionStatistics, resultBuilder);
+      }
+
+      return statusCode;
     }
-
-//    stdoutWrite.reset();
-//    stderrWrite.reset();
-//    ByteStringWriteReader stdoutReader =
-//        new ByteStringWriteReader(
-//            process.getInputStream(), stdoutWrite, (int) workerContext.getStandardOutputLimit());
-//    ByteStringWriteReader stderrReader =
-//        new ByteStringWriteReader(
-//            process.getErrorStream(), stderrWrite, (int) workerContext.getStandardErrorLimit());
-//
-//    Thread stdoutReaderThread = new Thread(stdoutReader);
-//    Thread stderrReaderThread = new Thread(stderrReader);
-//    stdoutReaderThread.start();
-//    stderrReaderThread.start();
-//
-//    Code statusCode = Code.OK;
-//    boolean processCompleted = false;
-//    try {
-//      if (timeout == null) {
-//        exitCode = process.waitFor();
-//        processCompleted = true;
-//      } else {
-//        long timeoutNanos = timeout.getSeconds() * 1000000000L + timeout.getNanos();
-//        long remainingNanoTime = timeoutNanos - (System.nanoTime() - startNanoTime);
-//        if (process.waitFor(remainingNanoTime, TimeUnit.NANOSECONDS)) {
-//          exitCode = process.exitValue();
-//          processCompleted = true;
-//        } else {
-//          logger.log(
-//              Level.INFO,
-//              format(
-//                  "process timed out for %s after %ds with %s timeout",
-//                  operationName, timeout.getSeconds(), isDefaultTimeout ? "default" : "action"));
-//          statusCode = Code.DEADLINE_EXCEEDED;
-//        }
-//      }
-//    } finally {
-//      if (!processCompleted) {
-//        process.destroy();
-//        int waitMillis = 1000;
-//        while (!process.waitFor(waitMillis, TimeUnit.MILLISECONDS)) {
-//          logger.log(
-//              Level.INFO,
-//              format("process did not respond to termination for %s, killing it", operationName));
-//          process.destroyForcibly();
-//          waitMillis = 100;
-//        }
-//      }
-//    }
-//    stdoutReaderThread.join();
-//    stderrReaderThread.join();
-
-    resultBuilder
-        .setExitCode(0)
-        .setStdoutRaw(responseBytes)
-        .setStderrRaw(ByteString.EMPTY);
-//    try {
-//      resultBuilder
-//          .setExitCode(0)
-//          .setStdoutRaw(responseBytes)
-//          .setStderrRaw(ByteString.EMPTY);
-//    } catch (IOException e) {
-//      if (statusCode != Code.DEADLINE_EXCEEDED) {
-//        throw e;
-//      }
-//      logger.log(
-//          Level.INFO,
-//          format("error getting process outputs for %s after timeout", operationName),
-//          e);
-//    }
-
-    // allow debugging after an execution
-    if (limits.debugAfterExecution) {
-      // Obtain execution statistics recorded while the action executed.
-      // Currently we can only source this data when using the sandbox.
-      ExecutionStatistics executionStatistics = ExecutionStatistics.newBuilder().build();
-      if (limits.useLinuxSandbox) {
-        executionStatistics =
-            ExecutionStatistics.newBuilder()
-                .mergeFrom(
-                    new FileInputStream(execDir.resolve("action_execution_statistics").toString()))
-                .build();
-      }
-
-      return ExecutionDebugger.performAfterExecutionDebug(
-          processBuilder, exitCode, limits, executionStatistics, resultBuilder);
-    }
-
-    Code statusCode = Code.OK;
-    return statusCode;
   }
 }
