@@ -13,8 +13,8 @@ public class PersistentCoordinatorTest {
   @Test
   public void simpleTestWorks() throws Exception {
 
-    MapPool<String, PersistentWorker<String, Integer, String>> spool = new MapPool<>(
-        key -> new PersistentWorker<String, Integer, String>() {
+    MapPool<String, KeyedWorker<String, Integer, String>> spool = new MapPool<>(
+        key -> new KeyedWorker<String, Integer, String>() {
           @Override
           public String getKey() {
             return key;
@@ -25,7 +25,7 @@ public class PersistentCoordinatorTest {
             return request.toString();
           }
         },
-        PersistentWorker::getKey
+        KeyedWorker::getKey
     );
 
     PersistentCoordinator<String, Integer, String> pc = new PersistentCoordinator<>(spool);

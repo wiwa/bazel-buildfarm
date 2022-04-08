@@ -10,9 +10,9 @@ package persistent;
  */
 public class PersistentCoordinator<K, I, O> {
 
-  private final ObjectPool<K, PersistentWorker<K, I, O>> workerPool;
+  private final ObjectPool<K, KeyedWorker<K, I, O>> workerPool;
 
-  public PersistentCoordinator(ObjectPool<K, PersistentWorker<K, I, O>> workerPool) {
+  public PersistentCoordinator(ObjectPool<K, KeyedWorker<K, I, O>> workerPool) {
     this.workerPool = workerPool;
   }
 
