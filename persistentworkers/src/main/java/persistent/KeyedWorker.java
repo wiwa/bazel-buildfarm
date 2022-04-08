@@ -1,6 +1,6 @@
 package persistent;
 
-public interface PersistentWorker<K, I, O> {
+public interface KeyedWorker<K, I, O> {
 
   K getKey();
 
