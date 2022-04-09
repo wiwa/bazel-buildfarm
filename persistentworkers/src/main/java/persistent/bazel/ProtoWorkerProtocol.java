@@ -5,7 +5,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-import com.google.devtools.build.lib.worker.WorkerProtocol;
+import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
+import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 
 public class ProtoWorkerProtocol implements Closeable {
 
@@ -24,13 +25,13 @@ public class ProtoWorkerProtocol implements Closeable {
     this.workersStdout = workersStdout;
   }
 
-  public void putRequest(WorkerProtocol.WorkRequest request) throws IOException {
+  public void putRequest(WorkRequest request) throws IOException {
     request.writeDelimitedTo(workersStdin);
     workersStdin.flush();
   }
 
-  public WorkerProtocol.WorkResponse getResponse() throws IOException {
-    return WorkerProtocol.WorkResponse.parseDelimitedFrom(workersStdout);
+  public WorkResponse getResponse() throws IOException {
+    return WorkResponse.parseDelimitedFrom(workersStdout);
   }
 
   @Override
