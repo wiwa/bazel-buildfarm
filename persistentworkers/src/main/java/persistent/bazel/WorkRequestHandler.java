@@ -1,6 +1,7 @@
 package persistent.bazel;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -55,5 +56,24 @@ public class WorkRequestHandler {
           .setRequestId(request.getRequestId())
           .build();
     }
+  }
+
+  public int processForever(InputStream in, PrintStream out, PrintStream err) {
+    while (true) {
+      try {
+        WorkRequest request = WorkRequest.parseDelimitedFrom(in);
+
+        if (request == null) {
+          break;
+        } else {
+          WorkResponse response = handleRequest(request);
+          writeToStream(response, out);
+        }
+      } catch (IOException e) {
+        e.printStackTrace(err);
+        return 1;
+      }
+    }
+    return 0;
   }
 }
