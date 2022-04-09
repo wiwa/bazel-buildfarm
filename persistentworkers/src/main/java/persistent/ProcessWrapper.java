@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Path;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
 public class ProcessWrapper implements Closeable {
     
@@ -49,6 +51,10 @@ public class ProcessWrapper implements Closeable {
     
     public Path getStdErrPath() {
         return this.stdErrFile;
+    }
+
+    public boolean isAlive() {
+        return this.process.isAlive();
     }
 
     @Override

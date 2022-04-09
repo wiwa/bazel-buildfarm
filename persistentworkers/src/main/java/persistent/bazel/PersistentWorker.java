@@ -14,11 +14,14 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
 
   private final WorkerKey key;
 
-  private final ProcessWrapper processWrapper;
+  private final ProtoWorkerRW workerRW;
 
-  public PersistentWorker(WorkerKey key, Path errorFile, ImmutableList<String> initCmd) throws IOException {
+  public PersistentWorker(
+      WorkerKey key, Path errorFile, ImmutableList<String> initCmd
+  ) throws IOException {
     this.key = key;
-    this.processWrapper = new ProcessWrapper(key.workDir, errorFile, initCmd);
+    ProcessWrapper processWrapper = new ProcessWrapper(key.workDir, errorFile, initCmd);
+    this.workerRW = new ProtoWorkerRW(processWrapper);
   }
 
   @Override
@@ -27,10 +30,15 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
   }
 
   @Override
-  public WorkResponse doWork(
-      WorkRequest request
-  ) {
-
+  public WorkResponse doWork(WorkRequest request) {
+    try {
+      workerRW.write(request);
+      return workerRW.waitAndRead();
+    } catch (IOException e) {
+      System.out.println("IO Failing with : " + e.getMessage());
+    } catch (Exception e) {
+      System.out.println("Failing with : " + e.getMessage());
+    }
     return null;
   }
 }
