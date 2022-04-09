@@ -1,4 +1,4 @@
-package persistent.pool;
+package persistent;
 
 
 import org.apache.commons.pool2.KeyedPooledObjectFactory;
