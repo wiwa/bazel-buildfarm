@@ -2,12 +2,13 @@ package persistent;
 
 import com.google.common.collect.ImmutableList;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Path;
 
-public class ProcessWrapper {
+public class ProcessWrapper implements Closeable {
     
     private final ImmutableList<String> args;
     
@@ -17,8 +18,8 @@ public class ProcessWrapper {
     
     private final Path stdErrFile;
     
-    public ProcessWrapper(Path workDir, Path stdErrFile, String[] args) throws IOException {
-        this.args = ImmutableList.copyOf(args);
+    public ProcessWrapper(Path workDir, Path stdErrFile, ImmutableList<String> args) throws IOException {
+        this.args = args;
         this.workDir = workDir;
         this.stdErrFile = stdErrFile;
         
@@ -48,5 +49,10 @@ public class ProcessWrapper {
     
     public Path getStdErrPath() {
         return this.stdErrFile;
+    }
+
+    @Override
+    public void close() throws IOException {
+        this.process.destroyForcibly();
     }
 }
