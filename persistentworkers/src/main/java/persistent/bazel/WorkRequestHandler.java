@@ -11,8 +11,6 @@ import java.util.function.BiFunction;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 
-import org.jetbrains.annotations.NotNull;
-
 /**
  * Persistence-compatible tools should instantiate this class
  */
@@ -20,11 +18,11 @@ public class WorkRequestHandler {
 
   private final BiFunction<List<String>, PrintWriter, Integer> callback;
 
-  public WorkRequestHandler(@NotNull BiFunction<List<String>, PrintWriter, Integer> callback) {
+  public WorkRequestHandler(BiFunction<List<String>, PrintWriter, Integer> callback) {
     this.callback = callback;
   }
 
-  public void writeToStream(@NotNull WorkResponse workResponse, @NotNull PrintStream out) throws IOException {
+  public void writeToStream(WorkResponse workResponse, PrintStream out) throws IOException {
     synchronized (this) {
       try {
         workResponse.writeDelimitedTo(out);
@@ -34,7 +32,7 @@ public class WorkRequestHandler {
     }
   }
 
-  public WorkResponse handleRequest(@NotNull WorkRequest request) throws IOException {
+  public WorkResponse handleRequest(WorkRequest request) throws IOException {
     try (StringWriter sw = new StringWriter();
          PrintWriter pw = new PrintWriter(sw)) {
 

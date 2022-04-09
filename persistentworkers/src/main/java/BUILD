@@ -1,6 +1,6 @@
 java_library(
     name = "persistent-workers",
-    srcs = glob(["*.java"]),
+    srcs = glob(["**/*.java"]),
     visibility = ["//visibility:public"],
     deps = [
         "//third_party/bazel/src/main/protobuf:worker_protocol_java_proto",
