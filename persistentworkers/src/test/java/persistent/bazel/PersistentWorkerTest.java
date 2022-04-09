@@ -17,6 +17,10 @@ public class PersistentWorkerTest {
   public void simpleTestWorks() throws Exception {
     Path workDir = Files.createTempDirectory("test-workdir-");
 
-    System.out.println(getClass().getResource("adder-bin_deploy.jar"));
+    Object r = getClass().getClassLoader().getResource("adder/adder-bin.jar");
+    System.out.println(r);
+    System.out.println("wtf");
+
+    assertThat(r).isEqualTo("");
   }
 }

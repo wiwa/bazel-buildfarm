@@ -3,8 +3,8 @@ java_test(
   size = "small",
   srcs = glob(["**/*.java"]),
   test_class = "persistent.bazel.PersistentWorkerTest",
-  data = [
-    "//persistentworkers/examples/src/main/java:adder-bin_deploy.jar"
+  resources = [
+    "//persistentworkers/src/test/resources:test-files"
   ],
   deps = [
     "//persistentworkers/src/main/java:persistent-workers",
