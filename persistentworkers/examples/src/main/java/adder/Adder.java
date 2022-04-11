@@ -2,6 +2,8 @@ package adder;
 
 import java.util.List;
 
+import com.google.common.collect.ImmutableList;
+
 import persistent.bazel.WorkRequestHandler;
 
 public class Adder {
@@ -16,16 +18,27 @@ public class Adder {
 
   private static WorkRequestHandler initialize() {
     return new WorkRequestHandler((actionArgs, pw) -> {
-      int res = work(actionArgs);
+      String res = work(actionArgs);
       pw.write(res);
       return 0;
     });
   }
 
-  private static int work(List<String> args) {
-    int a = Integer.parseInt(args.get(0));
-    int b = Integer.parseInt(args.get(1));
-    return compute(a, b);
+  private static String work(List<String> args) {
+    if (args.size() == 1 && args.get(0).equals("stop!")) {
+      System.err.println("exiting!");
+      System.exit(0);
+      return "";
+    } else if (args.size() != 2) {
+      System.err.println("Cannot handle args: " + ImmutableList.copyOf(args).toString());
+      System.exit(2);
+      return "";
+    }
+    else {
+      int a = Integer.parseInt(args.get(0));
+      int b = Integer.parseInt(args.get(1));
+      return String.valueOf(compute(a, b));
+    }
   }
 
   private static int compute(int a, int b) {

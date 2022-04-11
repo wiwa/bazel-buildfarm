@@ -19,7 +19,7 @@ import persistent.ProcessWrapper;
  */
 public class ProtoWorkerRW {
 
-  private final ProcessWrapper processWrapper;
+  public final ProcessWrapper processWrapper;
 
   private final InputStream readBufferStream;
 
@@ -54,11 +54,20 @@ public class ProtoWorkerRW {
   }
 
   public static void waitForInput(Supplier<Boolean> liveCheck, InputStream inputStream) throws IOException, InterruptedException {
-    while (inputStream.available() == 0) {
+    String workerDeathMsg = "Worker process for died while waiting for response";
+    while (inputAvailable(inputStream, workerDeathMsg) == 0) {
       Thread.sleep(10);
       if (!liveCheck.get()) {
-        throw new IOException("Worker process for died while waiting for response");
+        throw new IOException(workerDeathMsg);
       }
+    }
+  }
+
+  private static int inputAvailable(InputStream inputStream, String errorMsg) throws IOException {
+    try {
+      return inputStream.available();
+    } catch (IOException e) {
+      throw new IOException(errorMsg, e);
     }
   }
 }

@@ -31,6 +31,11 @@ public class ProcessWrapper implements Closeable {
                 .redirectError(stdErrFile.toFile());
         
         this.process = pb.start();
+        if (!this.process.isAlive()) {
+            int exitVal = this.process.exitValue();
+            String msg = "Process instantly terminated with: " + exitVal + "; see " + stdErrFile.toAbsolutePath();
+            throw new IOException(msg);
+        }
     }
     
     public ImmutableList<String> getInitialArgs() {
@@ -55,6 +60,14 @@ public class ProcessWrapper implements Closeable {
 
     public boolean isAlive() {
         return this.process.isAlive();
+    }
+
+    public int exitCode() {
+        return this.process.exitValue();
+    }
+
+    public int waitFor() throws InterruptedException {
+        return this.process.waitFor();
     }
 
     @Override

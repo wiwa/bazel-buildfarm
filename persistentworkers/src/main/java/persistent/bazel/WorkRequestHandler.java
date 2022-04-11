@@ -62,6 +62,8 @@ public class WorkRequestHandler {
       pw.flush();
       String output = sw.toString();
 
+      System.err.println(output);
+
       return WorkResponse
           .newBuilder()
           .setOutput(output)
