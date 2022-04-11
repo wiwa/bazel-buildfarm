@@ -16,29 +16,44 @@ import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
  */
 public class WorkRequestHandler {
 
-  private final BiFunction<List<String>, PrintWriter, Integer> callback;
+  private final BiFunction<List<String>, PrintWriter, Integer> requestHandler;
 
   public WorkRequestHandler(BiFunction<List<String>, PrintWriter, Integer> callback) {
-    this.callback = callback;
+    this.requestHandler = callback;
   }
 
   public void writeToStream(WorkResponse workResponse, PrintStream out) throws IOException {
     synchronized (this) {
-      try {
-        workResponse.writeDelimitedTo(out);
-      } finally {
-        out.flush();
-      }
+      ProtoWorkerRW.writeTo(workResponse, out);
     }
   }
 
-  public WorkResponse handleRequest(WorkRequest request) throws IOException {
+  public int processForever(InputStream in, PrintStream out, PrintStream err) {
+    while (true) {
+      try {
+        WorkRequest request = ProtoWorkerRW.readRequest(in);
+
+        if (request == null) {
+          break;
+        } else {
+          WorkResponse response = respondTo(request);
+          writeToStream(response, out);
+        }
+      } catch (IOException e) {
+        e.printStackTrace(err);
+        return 1;
+      }
+    }
+    return 0;
+  }
+
+  public WorkResponse respondTo(WorkRequest request) throws IOException {
     try (StringWriter sw = new StringWriter();
          PrintWriter pw = new PrintWriter(sw)) {
 
       int exitCode;
       try {
-        exitCode = callback.apply(request.getArgumentsList(), pw);
+        exitCode = requestHandler.apply(request.getArgumentsList(), pw);
       } catch (RuntimeException e) {
         e.printStackTrace(pw);
         exitCode = 1;
@@ -54,24 +69,5 @@ public class WorkRequestHandler {
           .setRequestId(request.getRequestId())
           .build();
     }
-  }
-
-  public int processForever(InputStream in, PrintStream out, PrintStream err) {
-    while (true) {
-      try {
-        WorkRequest request = WorkRequest.parseDelimitedFrom(in);
-
-        if (request == null) {
-          break;
-        } else {
-          WorkResponse response = handleRequest(request);
-          writeToStream(response, out);
-        }
-      } catch (IOException e) {
-        e.printStackTrace(err);
-        return 1;
-      }
-    }
-    return 0;
   }
 }
