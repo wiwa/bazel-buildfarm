@@ -15,19 +15,16 @@ import persistent.bazel.ProtoWorkerRW;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static persistent.bazel.testutil.ProcessUtils.spawnPersistentWorkerProcess;
+
 @RunWith(JUnit4.class)
 public class AdderTest {
 
   private JavaProcessWrapper spawnAdderProcess() throws IOException {
-    JavaProcessWrapper jpw = new JavaProcessWrapper(
-        Paths.get("."),
-        Paths.get("testerr.txt"),
+    return spawnPersistentWorkerProcess(
         System.getProperty("java.class.path"),
-        Adder.class,
-        new String[]{"--persistent_worker"}
+        Adder.class
     );
-    assertThat(jpw.isAlive()).isTrue();
-    return jpw;
   }
 
   @SuppressWarnings("CheckReturnValue")

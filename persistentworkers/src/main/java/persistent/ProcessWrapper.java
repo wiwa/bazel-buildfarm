@@ -29,7 +29,7 @@ public class ProcessWrapper implements Closeable {
                 .command(this.args)
                 .directory(this.workDir.toFile())
                 .redirectError(stdErrFile.toFile());
-        
+
         this.process = pb.start();
         if (!this.process.isAlive()) {
             int exitVal = this.process.exitValue();
