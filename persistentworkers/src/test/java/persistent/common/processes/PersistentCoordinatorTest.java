@@ -1,10 +1,14 @@
-package persistent;
+package persistent.common.processes;
 
 import static com.google.common.truth.Truth.assertThat;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+
+import persistent.common.KeyedWorker;
+import persistent.common.MapPool;
+import persistent.common.PersistentCoordinator;
 
 @RunWith(JUnit4.class)
 public class PersistentCoordinatorTest {

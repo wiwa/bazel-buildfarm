@@ -1,4 +1,4 @@
-package persistent;
+package persistent.common;
 
 public interface KeyedWorker<K, I, O> {
 

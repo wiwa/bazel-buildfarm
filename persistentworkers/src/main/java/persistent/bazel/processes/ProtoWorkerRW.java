@@ -1,4 +1,4 @@
-package persistent.bazel;
+package persistent.bazel.processes;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -9,7 +9,7 @@ import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 import com.google.protobuf.GeneratedMessageV3;
 
-import persistent.ProcessWrapper;
+import persistent.common.processes.ProcessWrapper;
 
 /**
  * Based off Google's ProtoWorkerProtocol
@@ -19,13 +19,17 @@ import persistent.ProcessWrapper;
  */
 public class ProtoWorkerRW {
 
-  public final ProcessWrapper processWrapper;
+  private final ProcessWrapper processWrapper;
 
   private final InputStream readBufferStream;
 
   public ProtoWorkerRW(ProcessWrapper processWrapper) {
     this.processWrapper = processWrapper;
     this.readBufferStream = processWrapper.getStdOut();
+  }
+
+  public ProcessWrapper getProcessWrapper() {
+    return this.processWrapper;
   }
 
   public void write(WorkRequest req) throws IOException {

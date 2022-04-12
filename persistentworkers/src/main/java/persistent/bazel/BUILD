@@ -1,10 +1,10 @@
 java_library(
     name = "bazel-persistent-workers",
-    srcs = glob(["*.java"]),
+    srcs = glob(["**/*.java"]),
     visibility = ["//visibility:public"],
     deps = [
         "//third_party/bazel/src/main/protobuf:worker_protocol_java_proto",
-        "//persistentworkers/src/main/java:persistent-workers",
+        "//persistentworkers/src/main/java/persistent/common:persistent-common",
         "@maven//:org_apache_commons_commons_pool2",
         "@maven//:com_github_pcj_google_options",
         "@maven//:com_google_guava_guava",

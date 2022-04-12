@@ -1,4 +1,4 @@
-package persistent;
+package persistent.common.processes;
 
 import java.io.IOException;
 import java.nio.file.Path;

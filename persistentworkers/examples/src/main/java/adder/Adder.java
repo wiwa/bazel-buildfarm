@@ -4,7 +4,7 @@ import java.util.List;
 
 import com.google.common.collect.ImmutableList;
 
-import persistent.bazel.WorkRequestHandler;
+import persistent.bazel.processes.WorkRequestHandler;
 
 public class Adder {
 

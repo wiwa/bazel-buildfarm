@@ -1,7 +1,6 @@
 package adder;
 
 import java.io.IOException;
-import java.nio.file.Paths;
 
 import com.google.devtools.build.lib.worker.WorkerProtocol;
 
@@ -9,13 +8,13 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-import persistent.JavaProcessWrapper;
-import persistent.ProcessWrapper;
-import persistent.bazel.ProtoWorkerRW;
+import persistent.common.processes.JavaProcessWrapper;
+import persistent.common.processes.ProcessWrapper;
+import persistent.bazel.processes.ProtoWorkerRW;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import static persistent.bazel.testutil.ProcessUtils.spawnPersistentWorkerProcess;
+import static persistent.testutil.ProcessUtils.spawnPersistentWorkerProcess;
 
 @RunWith(JUnit4.class)
 public class AdderTest {

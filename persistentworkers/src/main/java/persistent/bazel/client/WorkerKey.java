@@ -1,4 +1,4 @@
-package persistent.bazel;
+package persistent.bazel.client;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
@@ -46,7 +46,7 @@ final class WorkerKey {
    */
   private final int hash;
 
-  WorkerKey(
+  public WorkerKey(
       ImmutableList<String> args,
       ImmutableMap<String, String> env,
       Path execRoot,

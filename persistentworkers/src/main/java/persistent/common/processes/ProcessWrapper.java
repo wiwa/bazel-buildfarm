@@ -1,14 +1,16 @@
-package persistent;
+package persistent.common.processes;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.function.BiFunction;
-import java.util.function.Function;
+
+import static com.google.common.base.Preconditions.checkNotNull;
 
 public class ProcessWrapper implements Closeable {
     
@@ -16,18 +18,26 @@ public class ProcessWrapper implements Closeable {
     
     private final Process process;
     
-    private final Path workDir;
+    private final Path workRoot;
     
     private final Path stdErrFile;
     
     public ProcessWrapper(Path workDir, Path stdErrFile, ImmutableList<String> args) throws IOException {
-        this.args = args;
-        this.workDir = workDir;
-        this.stdErrFile = stdErrFile;
+        this.args = checkNotNull(args);
+        this.workRoot = checkNotNull(workDir);
+        Preconditions.checkArgument(
+            Files.isDirectory(workDir),
+            "Process workDir must be a directory, got: " + workDir
+        );
+        this.stdErrFile = checkNotNull(stdErrFile);
+        Preconditions.checkArgument(
+            !Files.isDirectory(stdErrFile),
+            "Process stdErrFile must be a non-directory file, got: " + stdErrFile
+        );
         
         ProcessBuilder pb = new ProcessBuilder()
                 .command(this.args)
-                .directory(this.workDir.toFile())
+                .directory(this.workRoot.toFile())
                 .redirectError(stdErrFile.toFile());
 
         this.process = pb.start();
@@ -42,8 +52,8 @@ public class ProcessWrapper implements Closeable {
         return this.args;
     }
     
-    public Path getWorkDir() {
-        return this.workDir;
+    public Path getWorkRoot() {
+        return this.workRoot;
     }
     
     public OutputStream getStdIn() {
