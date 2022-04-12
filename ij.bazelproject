@@ -19,3 +19,4 @@ java_language_level: 8
 
 test_sources:
   src/test/*
+  persistent/src/test/*
