@@ -11,9 +11,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-import persistent.bazel.processes.ProtoWorkerRW;
 import persistent.common.processes.JavaProcessWrapper;
 import persistent.common.processes.ProcessWrapper;
+import persistent.testutil.ProcessUtils;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -29,11 +29,11 @@ public class ProtoWorkerRWTest {
 
     String filename = "adder-bin_deploy.jar";
 
-    InputStream is = getClass().getClassLoader().getResourceAsStream(filename);
-
-    Path jarPath = workDir.resolve(filename);
-
-    Files.write(jarPath, IOUtils.toByteArray(is));
+    Path jarPath = ProcessUtils.retrieveFileResource(
+        getClass().getClassLoader(),
+        filename,
+        workDir.resolve(filename)
+    );
 
     assertThat(Files.exists(jarPath)).isTrue();
 
@@ -47,24 +47,25 @@ public class ProtoWorkerRWTest {
 
     String filename = "adder-bin_deploy.jar";
 
-    InputStream is = getClass().getClassLoader().getResourceAsStream(filename);
+    Path jarPath = ProcessUtils.retrieveFileResource(
+        getClass().getClassLoader(),
+        filename,
+        workDir.resolve(filename)
+    );
 
-    Path jarPath = workDir.resolve(filename);
-
-    Files.write(jarPath, IOUtils.toByteArray(is));
-
-    ProcessWrapper pw;
-    try (JavaProcessWrapper jpw = spawnPersistentWorkerProcess(jarPath.toString(), "adder.Adder")) {
-      pw = jpw;
+    ProcessWrapper process;
+    try (JavaProcessWrapper jpw = spawnPersistentWorkerProcess(jarPath, "adder.Adder")) {
+      process = jpw;
       ProtoWorkerRW rw = new ProtoWorkerRW(jpw);
       assertThat(jpw.isAlive()).isTrue();
       rw.write(WorkerProtocol.WorkRequest.newBuilder().addArguments("1").addArguments("3").build());
       assertThat(rw.waitAndRead().getOutput()).isEqualTo("4");
       assertThat(jpw.isAlive()).isTrue();
     }
-    assertThat(pw).isNotNull();
-    pw.waitFor();
-    assertThat(pw.isAlive()).isFalse();
-    assertThat(pw.exitCode()).isNotEqualTo(0);
+    // try-with-resources done -> close() called, process should have been destroyForicbly()'d
+    assertThat(process).isNotNull();
+    process.waitFor();
+    assertThat(process.isAlive()).isFalse();
+    assertThat(process.exitCode()).isNotEqualTo(0);
   }
 }

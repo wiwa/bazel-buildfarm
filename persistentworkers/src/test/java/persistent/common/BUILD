@@ -1,5 +1,5 @@
 java_test(
-  name = "tests",
+  name = "PersistentCoordinatorTest",
   size = "small",
   srcs = glob(["**/*.java"]),
   deps = [

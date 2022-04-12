@@ -25,8 +25,6 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
     this.workerRW = new ProtoWorkerRW(processWrapper);
   }
 
-
-
   @Override
   public WorkerKey getKey() {
     return this.key;

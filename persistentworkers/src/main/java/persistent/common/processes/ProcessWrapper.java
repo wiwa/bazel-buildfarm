@@ -13,14 +13,14 @@ import java.nio.file.Path;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 public class ProcessWrapper implements Closeable {
-    
-    private final ImmutableList<String> args;
-    
+
     private final Process process;
     
     private final Path workRoot;
     
     private final Path stdErrFile;
+
+    private final ImmutableList<String> args;
     
     public ProcessWrapper(Path workDir, Path stdErrFile, ImmutableList<String> args) throws IOException {
         this.args = checkNotNull(args);

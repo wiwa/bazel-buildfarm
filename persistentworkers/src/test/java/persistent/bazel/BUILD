@@ -1,5 +1,5 @@
 java_test(
-  name = "tests",
+  name = "ProtoWorkerRWTest",
   size = "small",
   srcs = glob(["**/*.java"]),
   resources = [
