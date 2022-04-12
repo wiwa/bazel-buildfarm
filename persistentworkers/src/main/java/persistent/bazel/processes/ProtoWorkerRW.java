@@ -16,16 +16,22 @@ import persistent.common.processes.ProcessWrapper;
  * Slightly generified to encapsulate read/writes
  * Should be used by both the PersistentWorker (client-side)
  *  and the WorkRequestHandler (persistent-process-side)
+ *
+ * TODO: What happens to input/output streams when the process dies?
+ *  Presumably, it is closed (as per tests).
  */
 public class ProtoWorkerRW {
 
   private final ProcessWrapper processWrapper;
 
-  private final InputStream readBufferStream;
+  private final InputStream readStream;
+
+  private final OutputStream writeStream;
 
   public ProtoWorkerRW(ProcessWrapper processWrapper) {
     this.processWrapper = processWrapper;
-    this.readBufferStream = processWrapper.getStdOut();
+    this.readStream = processWrapper.getStdOut();
+    this.writeStream = processWrapper.getStdIn();
   }
 
   public ProcessWrapper getProcessWrapper() {
@@ -33,12 +39,12 @@ public class ProtoWorkerRW {
   }
 
   public void write(WorkRequest req) throws IOException {
-    writeTo(req, this.processWrapper.getStdIn());
+    writeTo(req, this.writeStream);
   }
 
   public WorkResponse waitAndRead() throws IOException, InterruptedException {
-    waitForInput(processWrapper::isAlive, readBufferStream);
-    return readResponse(readBufferStream);
+    waitForInput(processWrapper::isAlive, readStream);
+    return readResponse(readStream);
   }
 
   public static <R extends GeneratedMessageV3> void writeTo(R req, OutputStream outputStream) throws IOException {
@@ -59,6 +65,7 @@ public class ProtoWorkerRW {
 
   public static void waitForInput(Supplier<Boolean> liveCheck, InputStream inputStream) throws IOException, InterruptedException {
     String workerDeathMsg = "Worker process for died while waiting for response";
+    // TODO don't spin
     while (inputAvailable(inputStream, workerDeathMsg) == 0) {
       Thread.sleep(10);
       if (!liveCheck.get()) {

@@ -48,22 +48,23 @@ public class WorkRequestHandler {
   }
 
   public WorkResponse respondTo(WorkRequest request) throws IOException {
-    try (StringWriter sw = new StringWriter();
-         PrintWriter pw = new PrintWriter(sw)) {
+    try (StringWriter outputWriter = new StringWriter();
+         PrintWriter outputPrinter = new PrintWriter(outputWriter)) {
 
       int exitCode;
       try {
-        exitCode = requestHandler.apply(request.getArgumentsList(), pw);
+        exitCode = requestHandler.apply(request.getArgumentsList(), outputPrinter);
       } catch (RuntimeException e) {
-        e.printStackTrace(pw);
+        e.printStackTrace(outputPrinter);
         exitCode = 1;
       }
 
-      pw.flush();
-      String output = sw.toString();
+      outputPrinter.flush();
+      String output = outputWriter.toString();
 
-      System.err.println(output);
-
+      if (exitCode != 0) {
+        System.err.println(output);
+      }
       return WorkResponse
           .newBuilder()
           .setOutput(output)
