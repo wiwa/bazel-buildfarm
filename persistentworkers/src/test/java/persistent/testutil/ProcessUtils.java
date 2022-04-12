@@ -1,9 +1,9 @@
-package persistent.bazel.testutil;
+package persistent.testutil;
 
 import java.io.IOException;
 import java.nio.file.Paths;
 
-import persistent.JavaProcessWrapper;
+import persistent.common.processes.JavaProcessWrapper;
 
 import static com.google.common.truth.Truth.assertThat;
 

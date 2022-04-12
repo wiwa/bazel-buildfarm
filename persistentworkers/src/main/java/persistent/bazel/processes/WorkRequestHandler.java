@@ -1,4 +1,4 @@
-package persistent.bazel;
+package persistent.bazel.processes;
 
 import java.io.IOException;
 import java.io.InputStream;

@@ -1,4 +1,4 @@
-package persistent;
+package persistent.common;
 
 public interface ObjectPool<K, V> {
 

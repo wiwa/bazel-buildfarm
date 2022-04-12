@@ -1,4 +1,4 @@
-package persistent.bazel;
+package persistent.bazel.processes;
 
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -11,15 +11,16 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-import persistent.JavaProcessWrapper;
-import persistent.ProcessWrapper;
+import persistent.bazel.processes.ProtoWorkerRW;
+import persistent.common.processes.JavaProcessWrapper;
+import persistent.common.processes.ProcessWrapper;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import static persistent.bazel.testutil.ProcessUtils.spawnPersistentWorkerProcess;
+import static persistent.testutil.ProcessUtils.spawnPersistentWorkerProcess;
 
 @RunWith(JUnit4.class)
-public class PersistentWorkerTest {
+public class ProtoWorkerRWTest {
 
   @SuppressWarnings("CheckReturnValue")
   @Test

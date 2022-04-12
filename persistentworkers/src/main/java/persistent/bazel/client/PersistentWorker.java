@@ -1,4 +1,4 @@
-package persistent.bazel;
+package persistent.bazel.client;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -7,8 +7,9 @@ import com.google.common.collect.ImmutableList;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 
-import persistent.KeyedWorker;
-import persistent.ProcessWrapper;
+import persistent.common.KeyedWorker;
+import persistent.common.processes.ProcessWrapper;
+import persistent.bazel.processes.ProtoWorkerRW;
 
 public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, WorkResponse> {
 
@@ -20,9 +21,11 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
       WorkerKey key, Path errorFile, ImmutableList<String> initCmd
   ) throws IOException {
     this.key = key;
-    ProcessWrapper processWrapper = new ProcessWrapper(key.workDir, errorFile, initCmd);
+    ProcessWrapper processWrapper = new ProcessWrapper(key.getExecRoot(), errorFile, initCmd);
     this.workerRW = new ProtoWorkerRW(processWrapper);
   }
+
+
 
   @Override
   public WorkerKey getKey() {

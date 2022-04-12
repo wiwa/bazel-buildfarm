@@ -3,7 +3,7 @@ java_library(
   srcs = glob(["**/*.java"]),
   visibility = ["//visibility:public"],
   deps = [
-    "//persistentworkers/src/main/java:persistent-workers",
+    "//persistentworkers/src/main/java/persistent/common:persistent-common",
     "//persistentworkers/src/main/java/persistent/bazel:bazel-persistent-workers",
     "@maven//:com_google_guava_guava",
   ]

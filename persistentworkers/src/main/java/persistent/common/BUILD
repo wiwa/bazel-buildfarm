@@ -1,5 +1,5 @@
 java_library(
-    name = "persistent-workers",
+    name = "persistent-common",
     srcs = glob(["**/*.java"]),
     visibility = ["//visibility:public"],
     deps = [
