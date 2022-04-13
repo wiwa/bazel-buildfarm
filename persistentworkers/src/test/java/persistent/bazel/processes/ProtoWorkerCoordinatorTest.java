@@ -11,13 +11,13 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-import persistent.bazel.client.PersistentWorker;
+import persistent.bazel.client.ProtoWorkerCoordinator;
 import persistent.bazel.client.WorkerKey;
 import persistent.testutil.ProcessUtils;
 import persistent.testutil.WorkerUtils;
 
 @RunWith(JUnit4.class)
-public class PersistentWorkerTest {
+public class ProtoWorkerCoordinatorTest {
 
   @SuppressWarnings("CheckReturnValue")
   @Test
@@ -42,9 +42,6 @@ public class PersistentWorkerTest {
 
     WorkerKey key = WorkerUtils.emptyWorkerKey(workDir, initArgs);
 
-    Path stdErrLog = workDir.resolve("test-err.log");
-    PersistentWorker worker = new PersistentWorker(key, stdErrLog);
-
     ImmutableList<String> arguments = ImmutableList.of("2", "4");
     String expectedOutput = "6";
 
@@ -53,12 +50,14 @@ public class PersistentWorkerTest {
         .setRequestId(0)
         .build();
 
+    ProtoWorkerCoordinator coordinator = ProtoWorkerCoordinator.simpleMapPool(workDir);
+
     WorkerProtocol.WorkResponse response;
     try {
-      response = worker.doWork(request);
+      response = coordinator.runRequest(key, request);
     } catch (Exception e) {
       System.err.println(e.getMessage());
-      System.err.println(Files.readAllLines(stdErrLog));
+      System.err.println(Files.readAllLines(coordinator.getLogsFor(key)));
       throw e;
     }
 
