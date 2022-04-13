@@ -18,7 +18,7 @@ import java.util.SortedMap;
  *
  * Data container that uniquely identifies a kind of worker process.
  */
-final class WorkerKey {
+public final class WorkerKey {
   /** Adding the cmd here instead of having multiple pools */
   private final ImmutableList<String> cmd;
   /** Build options. */
