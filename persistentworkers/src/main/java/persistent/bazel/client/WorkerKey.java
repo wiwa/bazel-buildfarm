@@ -19,6 +19,8 @@ import java.util.SortedMap;
  * Data container that uniquely identifies a kind of worker process.
  */
 final class WorkerKey {
+  /** Adding the cmd here instead of having multiple pools */
+  private final ImmutableList<String> cmd;
   /** Build options. */
   private final ImmutableList<String> args;
   /** Environment variables. */
@@ -47,6 +49,7 @@ final class WorkerKey {
   private final int hash;
 
   public WorkerKey(
+      ImmutableList<String> cmd,
       ImmutableList<String> args,
       ImmutableMap<String, String> env,
       Path execRoot,
@@ -57,6 +60,7 @@ final class WorkerKey {
       boolean cancellable
   ) {
     // Part of hash
+    this.cmd = Preconditions.checkNotNull(cmd);
     this.args = Preconditions.checkNotNull(args);
     this.env = Preconditions.checkNotNull(env);
     this.execRoot = Preconditions.checkNotNull(execRoot);
@@ -68,6 +72,11 @@ final class WorkerKey {
     this.workerFilesWithHashes = Preconditions.checkNotNull(workerFilesWithHashes);
 
     this.hash = calculateHashCode();
+  }
+
+  /** Getter function for variable cmd. */
+  public ImmutableList<String> getCmd() {
+    return cmd;
   }
 
   /** Getter function for variable args. */
@@ -122,6 +131,9 @@ final class WorkerKey {
     if (this.hash != workerKey.hash) {
       return false;
     }
+    if (!cmd.equals(workerKey.cmd)) {
+      return false;
+    }
     if (!args.equals(workerKey.args)) {
       return false;
     }
@@ -151,6 +163,7 @@ final class WorkerKey {
     // Use the string representation of the protocolFormat because the hash of the same enum value
     // can vary across instances.
     return Objects.hash(
+        cmd,
         args,
         env,
         execRoot,

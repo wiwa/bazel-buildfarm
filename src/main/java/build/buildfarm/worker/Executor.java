@@ -432,6 +432,23 @@ class Executor {
       return ExecutionDebugger.performBeforeExecutionDebug(processBuilder, limits, resultBuilder);
     }
 
+    boolean usePersistentWorker = limits.unusedProperties.containsKey("persistentWorkerKey");
+
+    if (usePersistentWorker) {
+      System.out.println("usePersistentWorker");
+      return PersistentExecutor.runOnPersistentWorker(
+        operationName,
+        execDir,
+        arguments,
+        environmentVariables,
+        limits,
+        timeout,
+        resultBuilder
+      );
+    } else {
+      System.out.println("don't usePersistentWorker");
+    }
+
     // run the action under docker
     if (limits.containerSettings.enabled) {
       DockerClient dockerClient = DockerClientBuilder.getInstance().build();
@@ -447,27 +464,22 @@ class Executor {
       settings.arguments = arguments;
 
       return DockerExecutor.runActionWithDocker(dockerClient, settings, resultBuilder);
-    } else {
-      return executeCommandNormally(
-          processBuilder,
-          operationName,
-          execDir,
-          arguments,
-          environmentVariables,
-          limits,
-          timeout,
-          resultBuilder
-      );
     }
-  }
 
+    return executeCommandNormally(
+      processBuilder,
+      operationName,
+      execDir,
+      limits,
+      timeout,
+      resultBuilder
+    );
+  }
 
   private Code executeCommandNormally(
       ProcessBuilder processBuilder,
       String operationName,
       Path execDir,
-      List<String> arguments,
-      List<EnvironmentVariable> environmentVariables,
       ResourceLimits limits,
       Duration timeout,
       ActionResult.Builder resultBuilder)
@@ -476,13 +488,12 @@ class Executor {
     final Write stdoutWrite;
     final Write stderrWrite;
 
-    // TODO **WHAT**?! get rid of "" != null and such?
-    if ("" != null && !"".isEmpty() && workerContext.getStreamStdout()) {
+    if (workerContext.getStreamStdout()) {
       stdoutWrite = workerContext.getOperationStreamWrite("");
     } else {
       stdoutWrite = new NullWrite();
     }
-    if ("" != null && !"".isEmpty() && workerContext.getStreamStderr()) {
+    if (workerContext.getStreamStderr()) {
       stderrWrite = workerContext.getOperationStreamWrite("");
     } else {
       stderrWrite = new NullWrite();
