@@ -2,15 +2,11 @@ package persistent.bazel.processes;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.SortedMap;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSortedMap;
-import com.google.common.hash.HashCode;
 import com.google.devtools.build.lib.worker.WorkerProtocol;
-import com.google.protobuf.ByteString;
 
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -18,6 +14,7 @@ import org.junit.runners.JUnit4;
 import persistent.bazel.client.PersistentWorker;
 import persistent.bazel.client.WorkerKey;
 import persistent.testutil.ProcessUtils;
+import persistent.testutil.WorkerUtils;
 
 @RunWith(JUnit4.class)
 public class PersistentWorkerTest {
@@ -43,27 +40,13 @@ public class PersistentWorkerTest {
         "--persistent_worker"
     );
 
-    HashCode workerFilesCombinedHash = HashCode.fromInt(0);
-    ImmutableList<WorkerProtocol.Input> inputs = ImmutableList.of();
-    SortedMap<Path, HashCode> workerFilesWithHashes = ImmutableSortedMap.of();
-
-    WorkerKey key = new WorkerKey(
-        ImmutableList.copyOf(initArgs),
-        ImmutableList.of(),
-        ImmutableMap.of(),
-        workDir,
-        "TestOp-Adder",
-        workerFilesCombinedHash,
-        workerFilesWithHashes,
-        false,
-        false
-    );
+    WorkerKey key = WorkerUtils.emptyWorkerKey(workDir, initArgs);
 
     ImmutableList<String> arguments = ImmutableList.of("2", "4");
+    String expectedOutput = "6";
 
     WorkerProtocol.WorkRequest request = WorkerProtocol.WorkRequest.newBuilder()
         .addAllArguments(arguments)
-        .addAllInputs(inputs)
         .setRequestId(0)
         .build();
 
@@ -82,7 +65,7 @@ public class PersistentWorkerTest {
     String responseOut = response.getOutput();
     int exitCode = response.getExitCode();
 
-    assert exitCode == 0;
-    assert responseOut.equals("6");
+    Assert.assertEquals(exitCode, 0);
+    Assert.assertEquals(responseOut, expectedOutput);
   }
 }
