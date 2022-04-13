@@ -485,19 +485,8 @@ class Executor {
       ActionResult.Builder resultBuilder)
       throws IOException, InterruptedException {
 
-    final Write stdoutWrite;
-    final Write stderrWrite;
-
-    if (workerContext.getStreamStdout()) {
-      stdoutWrite = workerContext.getOperationStreamWrite("");
-    } else {
-      stdoutWrite = new NullWrite();
-    }
-    if (workerContext.getStreamStderr()) {
-      stderrWrite = workerContext.getOperationStreamWrite("");
-    } else {
-      stderrWrite = new NullWrite();
-    }
+    final Write stdoutWrite = new NullWrite();
+    final Write stderrWrite = new NullWrite();
 
     long startNanoTime = System.nanoTime();
     Process process;
