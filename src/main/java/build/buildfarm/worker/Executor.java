@@ -427,22 +427,9 @@ class Executor {
       environment.put(environmentVariable.getKey(), environmentVariable.getValue());
     }
 
-    final Write stdoutWrite;
-    final Write stderrWrite;
-
-    if ("" != null && !"".isEmpty() && workerContext.getStreamStdout()) {
-      stdoutWrite = workerContext.getOperationStreamWrite("");
-    } else {
-      stdoutWrite = new NullWrite();
-    }
-    if ("" != null && !"".isEmpty() && workerContext.getStreamStderr()) {
-      stderrWrite = workerContext.getOperationStreamWrite("");
-    } else {
-      stderrWrite = new NullWrite();
-    }
-
     // allow debugging before an execution
     if (limits.debugBeforeExecution) {
+      // TODO this should not be using ProcessBuilder; current it uses it like a context
       return ExecutionDebugger.performBeforeExecutionDebug(processBuilder, limits, resultBuilder);
     }
 
@@ -461,6 +448,45 @@ class Executor {
       settings.arguments = arguments;
 
       return DockerExecutor.runActionWithDocker(dockerClient, settings, resultBuilder);
+    } else {
+      return executeCommandNormally(
+          processBuilder,
+          operationName,
+          execDir,
+          arguments,
+          environmentVariables,
+          limits,
+          timeout,
+          resultBuilder
+      );
+    }
+  }
+
+
+  private Code executeCommandNormally(
+      ProcessBuilder processBuilder,
+      String operationName,
+      Path execDir,
+      List<String> arguments,
+      List<EnvironmentVariable> environmentVariables,
+      ResourceLimits limits,
+      Duration timeout,
+      ActionResult.Builder resultBuilder)
+      throws IOException, InterruptedException {
+
+    final Write stdoutWrite;
+    final Write stderrWrite;
+
+    // TODO **WHAT**?! get rid of "" != null and such?
+    if ("" != null && !"".isEmpty() && workerContext.getStreamStdout()) {
+      stdoutWrite = workerContext.getOperationStreamWrite("");
+    } else {
+      stdoutWrite = new NullWrite();
+    }
+    if ("" != null && !"".isEmpty() && workerContext.getStreamStderr()) {
+      stderrWrite = workerContext.getOperationStreamWrite("");
+    } else {
+      stderrWrite = new NullWrite();
     }
 
     long startNanoTime = System.nanoTime();
@@ -571,5 +597,6 @@ class Executor {
     }
 
     return statusCode;
+
   }
 }
