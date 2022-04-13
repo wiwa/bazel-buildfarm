@@ -72,6 +72,16 @@ public class ExecutionPropertiesParser {
         .getPlatform()
         .getPropertiesList()
         .forEach((property) -> evaluateProperty(parser, limits, property));
+
+    System.out.println("RLS");
+    for (Map.Entry<String, String> kv : limits.unusedProperties.entrySet()) {
+      System.out.println(kv.getKey() + ":" + kv.getValue());
+    }
+    System.out.println("getOutputNodePropertiesList");
+    for (String npstr : command.getOutputNodePropertiesList()) {
+      System.out.println(npstr);
+    }
+
     return limits;
   }
 

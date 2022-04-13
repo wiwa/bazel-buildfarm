@@ -18,9 +18,14 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
   private final ProtoWorkerRW workerRW;
 
   public PersistentWorker(
-      WorkerKey key, Path errorFile, ImmutableList<String> initCmd
+      WorkerKey key, Path errorFile
   ) throws IOException {
     this.key = key;
+    ImmutableList.Builder<String> builder = ImmutableList.builder();
+    ImmutableList<String> initCmd = builder
+        .addAll(key.getCmd())
+        .addAll(key.getArgs())
+        .build();
     ProcessWrapper processWrapper = new ProcessWrapper(key.getExecRoot(), errorFile, initCmd);
     this.workerRW = new ProtoWorkerRW(processWrapper);
   }

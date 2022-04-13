@@ -3,6 +3,9 @@ package persistent.common;
 import java.util.HashMap;
 import java.util.function.Function;
 
+import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.NotNull;
+
 public class MapPool<K, V> implements ObjectPool<K, V> {
 
   private final HashMap<K, V> map;
@@ -30,5 +33,18 @@ public class MapPool<K, V> implements ObjectPool<K, V> {
     K key = identifier.apply(obj);
     map.put(key, obj);
     return key;
+  }
+
+  public static <K, V extends KeyedWorker<K, ?, ?>> @NotNull MapPool<K, V> ofKeyedWorker(Function<K, V> factory) {
+    return new MapPool<>(
+        key -> {
+          V worker = factory.apply(key);
+          if (worker.getKey() != key) {
+            throw new RuntimeException("worker.getKey() != key: " + worker.getKey() + " != " + key);
+          }
+          return worker;
+        },
+        KeyedWorker::getKey
+    );
   }
 }
