@@ -10,6 +10,8 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.apache.commons.io.IOUtils;
 
@@ -22,8 +24,12 @@ public class ProcessWrapper implements Closeable {
     private final Path workRoot;
 
     private final ImmutableList<String> args;
-    
+
     public ProcessWrapper(Path workDir, ImmutableList<String> args) throws IOException {
+        this(workDir, args, new HashMap<>());
+    }
+
+    public ProcessWrapper(Path workDir, ImmutableList<String> args, Map<String, String> env) throws IOException {
         this.args = checkNotNull(args);
         this.workRoot = checkNotNull(workDir);
         Preconditions.checkArgument(
@@ -34,6 +40,8 @@ public class ProcessWrapper implements Closeable {
         ProcessBuilder pb = new ProcessBuilder()
                 .command(this.args)
                 .directory(this.workRoot.toFile());
+
+        pb.environment().putAll(env);
 
         this.process = pb.start();
         if (!this.process.isAlive()) {
