@@ -53,40 +53,40 @@ public class PersistentExecutor {
 
     System.out.println("executeCommandOnPersistentWorker[" + operationName + "]");
 
-    System.out.println("Printing file tree");
-    try {
-      Files.walkFileTree(execDir, new FileVisitor<Path>() {
-        @Override
-        public FileVisitResult preVisitDirectory(
-            Path dir, BasicFileAttributes attrs
-        ) throws IOException {
-          return FileVisitResult.CONTINUE;
-        }
-
-        @Override
-        public FileVisitResult visitFile(
-            Path file, BasicFileAttributes attrs
-        ) throws IOException {
-          System.out.println("visitFile: " + execDir.relativize(file));
-          return FileVisitResult.CONTINUE;
-        }
-
-        @Override
-        public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
-          System.out.println("visitFileFailed: " + file + "; " + exc);
-          return FileVisitResult.CONTINUE;
-        }
-
-        @Override
-        public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
-          return FileVisitResult.CONTINUE;
-        }
-      });
-    } catch (IOException e) {
-      System.out.println("Failed walk: " + e);
-    }
-    System.out.println("operationContext.command.getWorkingDirectory():");
-    System.out.println(operationContext.command.getWorkingDirectory());
+    // System.out.println("Printing file tree");
+    // try {
+    //   Files.walkFileTree(execDir, new FileVisitor<Path>() {
+    //     @Override
+    //     public FileVisitResult preVisitDirectory(
+    //         Path dir, BasicFileAttributes attrs
+    //     ) throws IOException {
+    //       return FileVisitResult.CONTINUE;
+    //     }
+    //
+    //     @Override
+    //     public FileVisitResult visitFile(
+    //         Path file, BasicFileAttributes attrs
+    //     ) throws IOException {
+    //       System.out.println("visitFile: " + execDir.relativize(file));
+    //       return FileVisitResult.CONTINUE;
+    //     }
+    //
+    //     @Override
+    //     public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+    //       System.out.println("visitFileFailed: " + file + "; " + exc);
+    //       return FileVisitResult.CONTINUE;
+    //     }
+    //
+    //     @Override
+    //     public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+    //       return FileVisitResult.CONTINUE;
+    //     }
+    //   });
+    // } catch (IOException e) {
+    //   System.out.println("Failed walk: " + e);
+    // }
+    // System.out.println("operationContext.command.getWorkingDirectory():");
+    // System.out.println(operationContext.command.getWorkingDirectory());
     HashCode workerFilesCombinedHash = HashCode.fromInt(0);
     ImmutableList<Input> inputs = ImmutableList.of();
     SortedMap<Path, HashCode> workerFilesWithHashes = ImmutableSortedMap.of();
@@ -114,7 +114,7 @@ public class PersistentExecutor {
         args,
         env,
         execDir.toAbsolutePath(),
-        operationName,
+        "no-mnemonic",
         workerFilesCombinedHash,
         workerFilesWithHashes,
         true,
@@ -129,7 +129,17 @@ public class PersistentExecutor {
 
 
     System.out.println("Request with key: " + key);
-    System.out.println("Request arguments: " + requestArgs);
+    // System.out.println("Request arguments: " + requestArgs);
+    //
+    // String arg = requestArgs.get(0);
+    // if (arg.startsWith("@")) {
+    //   try{
+    //     System.out.println("Reading requestArg(0)");
+    //     Files.readAllLines(execDir.resolve(arg.substring(1))).forEach(System.out::println);
+    //   } catch (IOException e) {
+    //     System.out.println("Failed to read " + arg + ": " + e);
+    //   }
+    // }
 
     WorkResponse response = coordinator.runRequest(key, request);
 

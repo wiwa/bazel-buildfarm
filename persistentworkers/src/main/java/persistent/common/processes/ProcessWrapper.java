@@ -2,6 +2,7 @@ package persistent.common.processes;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -36,6 +37,11 @@ public class ProcessWrapper implements Closeable {
             Files.isDirectory(workDir),
             "Process workDir must be a directory, got: " + workDir
         );
+
+        System.out.println("Starting Process:");
+        System.out.println("\tcmd: " + this.args);
+        System.out.println("\tdir: " + this.workRoot);
+        System.out.println("\tenv: " + ImmutableMap.copyOf(env));
         
         ProcessBuilder pb = new ProcessBuilder()
                 .command(this.args)
