@@ -11,8 +11,8 @@ import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
 
 public class CommonsPool<K, V> extends GenericKeyedObjectPool<K, V> {
 
-  public CommonsPool(BaseKeyedPooledObjectFactory<K, V> factory, int max) {
-    super(factory, makeConfig(max));
+  public CommonsPool(BaseKeyedPooledObjectFactory<K, V> factory, int maxPerKey) {
+    super(factory, makeConfig(maxPerKey));
   }
 
   @Override
