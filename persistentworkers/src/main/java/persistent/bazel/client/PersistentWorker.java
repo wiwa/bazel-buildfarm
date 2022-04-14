@@ -36,6 +36,7 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
   @Override
   public WorkResponse doWork(WorkRequest request) {
     try {
+      System.out.println("Got request with args: " + request.getArgumentsList());
       workerRW.write(request);
       return workerRW.waitAndRead();
     } catch (IOException e) {

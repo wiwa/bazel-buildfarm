@@ -63,11 +63,11 @@ public final class WorkerKey {
     this.cmd = Preconditions.checkNotNull(cmd);
     this.args = Preconditions.checkNotNull(args);
     this.env = Preconditions.checkNotNull(env);
-    this.execRoot = Preconditions.checkNotNull(execRoot);
     this.mnemonic = Preconditions.checkNotNull(mnemonic);
     this.sandboxed = sandboxed;
     this.cancellable = cancellable;
     // Not part of hash
+    this.execRoot = Preconditions.checkNotNull(execRoot);
     this.workerFilesCombinedHash = Preconditions.checkNotNull(workerFilesCombinedHash);
     this.workerFilesWithHashes = Preconditions.checkNotNull(workerFilesWithHashes);
 
@@ -146,9 +146,6 @@ public final class WorkerKey {
     if (!env.equals(workerKey.env)) {
       return false;
     }
-    if (!execRoot.equals(workerKey.execRoot)) {
-      return false;
-    }
     return mnemonic.equals(workerKey.mnemonic);
 
   }
@@ -166,7 +163,6 @@ public final class WorkerKey {
         cmd,
         args,
         env,
-        execRoot,
         mnemonic,
         cancellable,
         sandboxed
@@ -177,6 +173,7 @@ public final class WorkerKey {
   @Override
   public String toString() {
     return "WorkerKey(" + "\n\t"
+        + "cmd=" + cmd + ",\n\t"
         + "args=" + args + ",\n\t"
         + "env=" + env + ",\n\t"
         + "execRoot=" + execRoot.toAbsolutePath()
