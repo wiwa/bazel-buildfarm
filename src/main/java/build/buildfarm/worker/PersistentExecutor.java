@@ -57,15 +57,20 @@ public class PersistentExecutor {
     SortedMap<Path, HashCode> workerFilesWithHashes = ImmutableSortedMap.of();
 
     ImmutableList<String> argsList = ImmutableList.copyOf(arguments);
-    if (!argsList.contains(JAVABUILDER_JAR)) {
+
+    int jarOrBinIdx = 0;
+    boolean isScalac = arguments.size() > 1 && arguments.get(0).endsWith("scalac/scalac");
+    if (argsList.contains(JAVABUILDER_JAR)) {
+      jarOrBinIdx = argsList.indexOf(JAVABUILDER_JAR);
+    }
+    else if(!isScalac) {
       return Code.INVALID_ARGUMENT;
     }
-    int jarIdx = argsList.indexOf(JAVABUILDER_JAR);
 
 
-    ImmutableList<String> cmd = argsList.subList(0, jarIdx + 1);
+    ImmutableList<String> cmd = argsList.subList(0, jarOrBinIdx + 1);
     ImmutableList<String> args = ImmutableList.of(PERSISTENT_WORKER_FLAG);
-    ImmutableList<String> requestArgs = argsList.subList(jarIdx + 1, argsList.size());
+    ImmutableList<String> requestArgs = argsList.subList(jarOrBinIdx + 1, argsList.size());
 
     WorkerKey key = new WorkerKey(
         cmd,
