@@ -17,7 +17,6 @@ public class ProcessUtils {
   public static JavaProcessWrapper spawnPersistentWorkerProcess(String classpath, String className) throws IOException {
     JavaProcessWrapper jpw = new JavaProcessWrapper(
         Paths.get("."),
-        Paths.get("testerr.txt"),
         classpath,
         className,
         new String[]{"--persistent_worker"}

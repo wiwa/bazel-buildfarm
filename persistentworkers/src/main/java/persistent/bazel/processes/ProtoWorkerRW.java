@@ -3,11 +3,14 @@ package persistent.bazel.processes;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.function.Supplier;
 
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 import com.google.protobuf.GeneratedMessageV3;
+
+import org.apache.commons.io.IOUtils;
 
 import persistent.common.processes.ProcessWrapper;
 
@@ -43,7 +46,12 @@ public class ProtoWorkerRW {
   }
 
   public WorkResponse waitAndRead() throws IOException, InterruptedException {
-    waitForInput(processWrapper::isAlive, readStream);
+    try {
+      waitForInput(processWrapper::isAlive, readStream);
+    } catch (IOException e) {
+      String stdErrMsg = IOUtils.toString(processWrapper.getStdErr(), StandardCharsets.UTF_8);
+      throw new IOException("IOException on waitForInput; stdErr: " + stdErrMsg, e);
+    }
     return readResponse(readStream);
   }
 
@@ -69,7 +77,7 @@ public class ProtoWorkerRW {
     while (inputAvailable(inputStream, workerDeathMsg) == 0) {
       Thread.sleep(10);
       if (!liveCheck.get()) {
-        throw new IOException(workerDeathMsg);
+        throw new IOException(workerDeathMsg + "\n");
       }
     }
   }
