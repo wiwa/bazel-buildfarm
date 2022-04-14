@@ -1,39 +1,26 @@
 package persistent.bazel.client;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.UUID;
-
-import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
+import com.google.devtools.build.lib.worker.WorkerProtocol;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 
-import persistent.common.KeyedWorker;
-import persistent.common.MapPool;
-import persistent.common.ObjectPool;
-import persistent.common.PersistentCoordinator;
+import org.apache.commons.pool2.impl.GenericKeyedObjectPool;
 
-public class ProtoWorkerCoordinator extends PersistentCoordinator<WorkerKey, WorkRequest, WorkResponse> {
+public class ProtoWorkerCoordinator {
 
-  ProtoWorkerCoordinator(
-      ObjectPool<WorkerKey, KeyedWorker<WorkerKey, WorkRequest, WorkResponse>> workerPool
-  ) {
-    super(workerPool);
+  private final GenericKeyedObjectPool<WorkerKey, PersistentWorker> workerPool;
+
+  ProtoWorkerCoordinator(GenericKeyedObjectPool<WorkerKey, PersistentWorker> workerPool) {
+    this.workerPool = workerPool;
   }
 
-  public static ProtoWorkerCoordinator simpleMapPool() {
-
-    return new ProtoWorkerCoordinator(MapPool.ofKeyedWorker(ProtoWorkerCoordinator::makeWorker));
+  public static ProtoWorkerCoordinator ofCommonsPool() {
+    return new ProtoWorkerCoordinator(new CommonsWorkerPool(4));
   }
 
-  private static PersistentWorker makeWorker(WorkerKey key) {
-    try {
-      return new PersistentWorker(key);
-    } catch (IOException e) {
-      System.err.println("Failed to make Persistent Worker:\n" + e);
-      return null;
-    }
+  public WorkResponse runRequest(WorkerKey workerKey, WorkerProtocol.WorkRequest request) throws Exception {
+    PersistentWorker worker = workerPool.borrowObject(workerKey);
+    WorkResponse response = worker.doWork(request);
+    workerPool.invalidateObject(workerKey, worker);
+    return response;
   }
 }
