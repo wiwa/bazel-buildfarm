@@ -91,7 +91,14 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
     /** When a worker process is discarded, destroy its process, too. */
     @Override
     public void destroyObject(WorkerKey key, PooledObject<PersistentWorker> p) {
-      System.out.println("Destroying worker from WorkerKey: " + key);
+      StringBuilder msgBuilder = new StringBuilder();
+      msgBuilder.append("Destroying worker from WorkerKey: ");
+      msgBuilder.append(key);
+      for (StackTraceElement e: Thread.currentThread().getStackTrace()) {
+        msgBuilder.append("\n\t");
+        msgBuilder.append(e);
+      }
+      System.out.println(msgBuilder);
       p.getObject().destroy();
     }
 
@@ -125,6 +132,7 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
                 .append(newHash != null ? newHash : "<none>");
           }
         }
+        System.out.println(msg);
       }
 
       return !filesChanged;
