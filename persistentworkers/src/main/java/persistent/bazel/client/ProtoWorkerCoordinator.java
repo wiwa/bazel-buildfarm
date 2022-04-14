@@ -20,7 +20,7 @@ public class ProtoWorkerCoordinator {
   public WorkResponse runRequest(WorkerKey workerKey, WorkerProtocol.WorkRequest request) throws Exception {
     PersistentWorker worker = workerPool.borrowObject(workerKey);
     WorkResponse response = worker.doWork(request);
-    workerPool.invalidateObject(workerKey, worker);
+    workerPool.returnObject(workerKey, worker);
     return response;
   }
 }
