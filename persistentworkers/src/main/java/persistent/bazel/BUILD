@@ -10,6 +10,7 @@ java_library(
         "@maven//:com_google_guava_guava",
         "@maven//:com_google_protobuf_protobuf_java",
         "@maven//:com_google_protobuf_protobuf_java_util",
+        "@maven//:commons_io_commons_io",
         "@maven//:io_grpc_grpc_api",
         "@maven//:io_grpc_grpc_context",
         "@maven//:io_grpc_grpc_core",

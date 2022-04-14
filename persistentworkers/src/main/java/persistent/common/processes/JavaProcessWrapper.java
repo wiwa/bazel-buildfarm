@@ -11,9 +11,9 @@ import com.google.common.collect.ImmutableList;
 public class JavaProcessWrapper extends ProcessWrapper {
 
   public JavaProcessWrapper(
-      Path workDir, Path stdErrFile, String classPath, String fullClassName, String[] args
+      Path workDir, String classPath, String fullClassName, String[] args
   ) throws IOException {
-    super(workDir, stdErrFile, cmdArgs(
+    super(workDir, cmdArgs(
         new String[]{
             "java",
             "-cp",
