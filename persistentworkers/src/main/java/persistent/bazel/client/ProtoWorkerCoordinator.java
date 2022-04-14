@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
+import java.util.UUID;
 
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
@@ -30,9 +31,13 @@ public class ProtoWorkerCoordinator extends PersistentCoordinator<WorkerKey, Wor
   }
 
   public static ProtoWorkerCoordinator simpleMapPool() {
-    Path logDir = Paths.get("./ProtoWorkerCoordinator-logs");
-
-    return simpleMapPool(logDir);
+    try {
+      Path logDir = Files.createTempDirectory("logs-ProtoWorkerCoordinator_");
+      return simpleMapPool(logDir);
+    } catch (IOException e) {
+      System.err.println("Couldn't create log directory: " + e.getMessage());
+      return null;
+    }
   }
 
   public static ProtoWorkerCoordinator simpleMapPool(Path logDir) {
@@ -41,7 +46,7 @@ public class ProtoWorkerCoordinator extends PersistentCoordinator<WorkerKey, Wor
   }
 
   private static PersistentWorker makeWorker(WorkerKey key, Path logDir) {
-    Path errorFile = logDir.resolve(key.hashCode() + ".stderr");
+    Path errorFile = logDir.resolve("keyhash" + key.hashCode() + "_" + UUID.randomUUID() + ".stderr");
 
     try {
       return new PersistentWorker(key, errorFile);
