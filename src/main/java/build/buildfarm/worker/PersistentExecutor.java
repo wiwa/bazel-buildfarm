@@ -31,6 +31,10 @@ public class PersistentExecutor {
 
   private static ProtoWorkerCoordinator coordinator = ProtoWorkerCoordinator.simpleMapPool();
 
+  static final String PERSISTENT_WORKER_FLAG = "--persistent_worker";
+
+  static final String JAVABUILDER_JAR = "external/remote_java_tools/java_tools/JavaBuilder_deploy.jar";
+
   static Code runOnPersistentWorker(
       String operationName,
       Path execDir,
@@ -48,14 +52,24 @@ public class PersistentExecutor {
     ImmutableMap<String, String> env = builder.build();
 
 
-    byte[] noBytes = new byte[0];
-    HashCode workerFilesCombinedHash = HashCode.fromBytes(noBytes);
+    HashCode workerFilesCombinedHash = HashCode.fromInt(0);
     ImmutableList<Input> inputs = ImmutableList.of();
     SortedMap<Path, HashCode> workerFilesWithHashes = ImmutableSortedMap.of();
 
+    ImmutableList<String> argsList = ImmutableList.copyOf(arguments);
+    if (!argsList.contains(JAVABUILDER_JAR)) {
+      return Code.INVALID_ARGUMENT;
+    }
+    int jarIdx = argsList.indexOf(JAVABUILDER_JAR);
+
+
+    ImmutableList<String> cmd = argsList.subList(0, jarIdx + 1);
+    ImmutableList<String> args = ImmutableList.of(PERSISTENT_WORKER_FLAG);
+    ImmutableList<String> requestArgs = argsList.subList(jarIdx + 1, argsList.size());
+
     WorkerKey key = new WorkerKey(
-        ImmutableList.copyOf(arguments),
-        ImmutableList.of(),
+        cmd,
+        args,
         env,
         execDir,
         operationName,
@@ -66,7 +80,7 @@ public class PersistentExecutor {
     );
 
     WorkRequest request = WorkRequest.newBuilder()
-            .addAllArguments(arguments)
+            .addAllArguments(requestArgs)
             .addAllInputs(inputs)
             .setRequestId(0)
             .build();

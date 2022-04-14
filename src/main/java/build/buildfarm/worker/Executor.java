@@ -42,6 +42,7 @@ import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.core.DockerClientBuilder;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.lib.shell.Protos.ExecutionStatistics;
 import com.google.longrunning.Operation;
 import com.google.protobuf.Any;
@@ -414,6 +415,16 @@ class Executor {
       Duration timeout,
       ActionResult.Builder resultBuilder)
       throws IOException, InterruptedException {
+
+    System.out.println("======<");
+    System.out.println("Calling executeCommand with:");
+    System.out.println("operationName=" + operationName);
+    System.out.println("arguments=" + ImmutableList.copyOf(arguments));
+    System.out.println("environmentVariables=" + ImmutableList.copyOf(environmentVariables));
+    System.out.println("limits.unusedProperties=" + ImmutableMap.copyOf(limits.unusedProperties));
+    System.out.println("timeout=" + timeout);
+    System.out.println("======>");
+
     ProcessBuilder processBuilder =
         new ProcessBuilder(arguments).directory(execDir.toAbsolutePath().toFile());
 
@@ -434,6 +445,9 @@ class Executor {
     }
 
     boolean usePersistentWorker = limits.unusedProperties.containsKey("persistentWorkerKey");
+
+    boolean isJavaBuilder = arguments.contains("external/remote_java_tools/java_tools/JavaBuilder_deploy.jar");
+    usePersistentWorker = usePersistentWorker || isJavaBuilder;
 
     if (usePersistentWorker) {
       System.out.println("usePersistentWorker");
