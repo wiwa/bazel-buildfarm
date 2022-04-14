@@ -50,14 +50,13 @@ public class ProtoWorkerCoordinatorTest {
         .setRequestId(0)
         .build();
 
-    ProtoWorkerCoordinator coordinator = ProtoWorkerCoordinator.simpleMapPool(workDir);
+    ProtoWorkerCoordinator coordinator = ProtoWorkerCoordinator.ofCommonsPool();
 
     WorkerProtocol.WorkResponse response;
     try {
       response = coordinator.runRequest(key, request);
     } catch (Exception e) {
       System.err.println(e.getMessage());
-      System.err.println(Files.readAllLines(coordinator.getLogsFor(key)));
       throw e;
     }
 

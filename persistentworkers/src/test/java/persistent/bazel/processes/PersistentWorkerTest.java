@@ -43,7 +43,7 @@ public class PersistentWorkerTest {
     WorkerKey key = WorkerUtils.emptyWorkerKey(workDir, initArgs);
 
     Path stdErrLog = workDir.resolve("test-err.log");
-    PersistentWorker worker = new PersistentWorker(key, stdErrLog);
+    PersistentWorker worker = new PersistentWorker(key);
 
     ImmutableList<String> arguments = ImmutableList.of("2", "4");
     String expectedOutput = "6";
