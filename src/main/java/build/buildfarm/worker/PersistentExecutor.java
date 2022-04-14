@@ -49,6 +49,7 @@ public class PersistentExecutor {
 
     ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
     environmentVariables.forEach(envVar -> builder.put(envVar.getName(), envVar.getValue()));
+    // builder.put("JAVABIN", "external/remotejdk11_linux/bin/java");
     ImmutableMap<String, String> env = builder.build();
 
 

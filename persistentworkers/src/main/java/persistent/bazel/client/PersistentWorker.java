@@ -24,7 +24,7 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
         .addAll(key.getCmd())
         .addAll(key.getArgs())
         .build();
-    ProcessWrapper processWrapper = new ProcessWrapper(key.getExecRoot(), initCmd);
+    ProcessWrapper processWrapper = new ProcessWrapper(key.getExecRoot(), initCmd, key.getEnv());
     this.workerRW = new ProtoWorkerRW(processWrapper);
   }
 

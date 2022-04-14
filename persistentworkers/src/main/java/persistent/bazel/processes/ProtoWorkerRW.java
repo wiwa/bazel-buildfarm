@@ -50,7 +50,17 @@ public class ProtoWorkerRW {
       waitForInput(processWrapper::isAlive, readStream);
     } catch (IOException e) {
       String stdErrMsg = IOUtils.toString(processWrapper.getStdErr(), StandardCharsets.UTF_8);
-      throw new IOException("IOException on waitForInput; stdErr: " + stdErrMsg, e);
+      String stdOut = "";
+      try {
+        if (processWrapper.isAlive() && readStream.available() > 0) {
+          stdOut = IOUtils.toString(readStream, StandardCharsets.UTF_8);
+        } else {
+          stdOut = "no stream available";
+        }
+      } catch (IOException e2) {
+        stdOut = "Exception trying to read stdout: " + e2;
+      }
+      throw new IOException("IOException on waitForInput; stdErr: " + stdErrMsg + "\nStdout: " + stdOut, e);
     }
     return readResponse(readStream);
   }
