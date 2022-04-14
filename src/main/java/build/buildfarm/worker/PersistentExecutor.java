@@ -1,7 +1,12 @@
 package build.buildfarm.worker;
 
+import java.io.IOException;
+import java.nio.file.FileVisitResult;
+import java.nio.file.FileVisitor;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.AbstractMap;
 import java.util.List;
 import java.util.Map;
@@ -36,10 +41,11 @@ public class PersistentExecutor {
   static final String JAVABUILDER_JAR = "external/remote_java_tools/java_tools/JavaBuilder_deploy.jar";
 
   static Code runOnPersistentWorker(
+      OperationContext operationContext,
       String operationName,
       Path execDir,
       List<String> arguments,
-      List<Command.EnvironmentVariable> environmentVariables,
+      Map<String, String> environmentVariables,
       ResourceLimits limits,
       Duration timeout,
       ActionResult.Builder resultBuilder
@@ -47,12 +53,40 @@ public class PersistentExecutor {
 
     System.out.println("executeCommandOnPersistentWorker[" + operationName + "]");
 
-    ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
-    environmentVariables.forEach(envVar -> builder.put(envVar.getName(), envVar.getValue()));
-    // builder.put("JAVABIN", "external/remotejdk11_linux/bin/java");
-    ImmutableMap<String, String> env = builder.build();
+    System.out.println("Printing file tree");
+    try {
+      Files.walkFileTree(execDir, new FileVisitor<Path>() {
+        @Override
+        public FileVisitResult preVisitDirectory(
+            Path dir, BasicFileAttributes attrs
+        ) throws IOException {
+          return FileVisitResult.CONTINUE;
+        }
 
+        @Override
+        public FileVisitResult visitFile(
+            Path file, BasicFileAttributes attrs
+        ) throws IOException {
+          System.out.println("visitFile: " + execDir.relativize(file));
+          return FileVisitResult.CONTINUE;
+        }
 
+        @Override
+        public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+          System.out.println("visitFileFailed: " + file + "; " + exc);
+          return FileVisitResult.CONTINUE;
+        }
+
+        @Override
+        public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+          return FileVisitResult.CONTINUE;
+        }
+      });
+    } catch (IOException e) {
+      System.out.println("Failed walk: " + e);
+    }
+    System.out.println("operationContext.command.getWorkingDirectory():");
+    System.out.println(operationContext.command.getWorkingDirectory());
     HashCode workerFilesCombinedHash = HashCode.fromInt(0);
     ImmutableList<Input> inputs = ImmutableList.of();
     SortedMap<Path, HashCode> workerFilesWithHashes = ImmutableSortedMap.of();
@@ -73,15 +107,17 @@ public class PersistentExecutor {
     ImmutableList<String> args = ImmutableList.of(PERSISTENT_WORKER_FLAG);
     ImmutableList<String> requestArgs = argsList.subList(jarOrBinIdx + 1, argsList.size());
 
+    ImmutableMap<String, String> env = ImmutableMap.copyOf(environmentVariables);
+
     WorkerKey key = new WorkerKey(
         cmd,
         args,
         env,
-        execDir,
+        execDir.toAbsolutePath(),
         operationName,
         workerFilesCombinedHash,
         workerFilesWithHashes,
-        false,
+        true,
         false
     );
 
@@ -90,6 +126,10 @@ public class PersistentExecutor {
             .addAllInputs(inputs)
             .setRequestId(0)
             .build();
+
+
+    System.out.println("Request with key: " + key);
+    System.out.println("Request arguments: " + requestArgs);
 
     WorkResponse response = coordinator.runRequest(key, request);
 

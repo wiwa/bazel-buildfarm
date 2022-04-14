@@ -17,6 +17,9 @@ public class PersistentCoordinator<K, I, O> {
   }
 
   public O runRequest(K workerKey, I request) {
-    return workerPool.obtain(workerKey).doWork(request);
+    KeyedWorker<K, I, O> worker = workerPool.obtain(workerKey);
+    O response = worker.doWork(request);
+    workerPool.release(worker);
+    return response;
   }
 }
