@@ -419,6 +419,7 @@ class Executor {
     System.out.println("======<");
     System.out.println("Calling executeCommand with:");
     System.out.println("operationName=" + operationName);
+    System.out.println("execDir=" + execDir.toAbsolutePath());
     System.out.println("arguments=" + ImmutableList.copyOf(arguments));
     System.out.println("environmentVariables=" + ImmutableList.copyOf(environmentVariables));
     System.out.println("limits.unusedProperties=" + ImmutableMap.copyOf(limits.unusedProperties));
@@ -453,10 +454,11 @@ class Executor {
     if (usePersistentWorker) {
       System.out.println("usePersistentWorker");
       return PersistentExecutor.runOnPersistentWorker(
+        operationContext,
         operationName,
         execDir,
         arguments,
-        environmentVariables,
+        environment,
         limits,
         timeout,
         resultBuilder
