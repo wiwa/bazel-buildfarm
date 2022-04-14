@@ -447,7 +447,8 @@ class Executor {
     boolean usePersistentWorker = limits.unusedProperties.containsKey("persistentWorkerKey");
 
     boolean isJavaBuilder = arguments.contains("external/remote_java_tools/java_tools/JavaBuilder_deploy.jar");
-    usePersistentWorker = usePersistentWorker || isJavaBuilder;
+    boolean isScalac = arguments.size() > 1 && arguments.get(0).endsWith("scalac/scalac");
+    usePersistentWorker = usePersistentWorker || isJavaBuilder || isScalac;
 
     if (usePersistentWorker) {
       System.out.println("usePersistentWorker");
