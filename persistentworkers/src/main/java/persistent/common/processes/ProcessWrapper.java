@@ -50,6 +50,7 @@ public class ProcessWrapper implements Closeable {
         pb.environment().putAll(env);
 
         this.process = pb.start();
+
         if (!this.process.isAlive()) {
             int exitVal = this.process.exitValue();
             String msg = "Process instantly terminated with: " + exitVal + "; " +
@@ -82,7 +83,7 @@ public class ProcessWrapper implements Closeable {
         return this.process.isAlive();
     }
 
-    public int exitCode() {
+    public int exitValue() {
         return this.process.exitValue();
     }
 
@@ -90,8 +91,12 @@ public class ProcessWrapper implements Closeable {
         return this.process.waitFor();
     }
 
+    public void destroy() {
+        this.process.destroyForcibly();
+    }
+
     @Override
     public void close() throws IOException {
-        this.process.destroyForcibly();
+        this.destroy();
     }
 }

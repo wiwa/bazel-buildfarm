@@ -1,12 +1,10 @@
 package persistent.bazel.processes;
 
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 import com.google.devtools.build.lib.worker.WorkerProtocol;
 
-import org.apache.commons.io.IOUtils;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -66,6 +64,6 @@ public class ProtoWorkerRWTest {
     assertThat(process).isNotNull();
     process.waitFor();
     assertThat(process.isAlive()).isFalse();
-    assertThat(process.exitCode()).isNotEqualTo(0);
+    assertThat(process.exitValue()).isNotEqualTo(0);
   }
 }

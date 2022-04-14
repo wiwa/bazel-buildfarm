@@ -40,7 +40,7 @@ public class AdderTest {
     assertThat(pw).isNotNull();
     pw.waitFor();
     assertThat(pw.isAlive()).isFalse();
-    assertThat(pw.exitCode()).isNotEqualTo(0);
+    assertThat(pw.exitValue()).isNotEqualTo(0);
   }
 
   @SuppressWarnings("CheckReturnValue")
@@ -51,7 +51,7 @@ public class AdderTest {
       rw.write(WorkerProtocol.WorkRequest.newBuilder().addArguments("stop!").build());
       jpw.waitFor();
       assertThat(jpw.isAlive()).isFalse();
-      assertThat(jpw.exitCode()).isEqualTo(0);
+      assertThat(jpw.exitValue()).isEqualTo(0);
     }
   }
 
@@ -63,7 +63,7 @@ public class AdderTest {
       rw.write(WorkerProtocol.WorkRequest.newBuilder().addArguments("bad request").build());
       jpw.waitFor();
       assertThat(jpw.isAlive()).isFalse();
-      assertThat(jpw.exitCode()).isEqualTo(2);
+      assertThat(jpw.exitValue()).isEqualTo(2);
     }
   }
 }
