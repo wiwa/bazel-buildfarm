@@ -1,18 +1,26 @@
 package build.buildfarm.worker;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.hash.HashCode;
+import com.google.common.hash.Hasher;
+import com.google.common.hash.Hashing;
 import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
@@ -50,9 +58,6 @@ public class PersistentExecutor {
 
     System.out.println("executeCommandOnPersistentWorker[" + operationName + "]");
 
-    HashCode workerFilesCombinedHash = HashCode.fromInt(0);
-    SortedMap<Path, HashCode> workerFilesWithHashes = ImmutableSortedMap.of();
-
     ImmutableList<String> argsList = ImmutableList.copyOf(arguments);
 
     ImmutableMap<String, String> env = ImmutableMap.copyOf(environmentVariables);
@@ -86,8 +91,27 @@ public class PersistentExecutor {
         cancellable
     );
     String workRootDirName = "work-root_" + executionName + "_" + workRootId;
-
     Path workRoot = workRootsDir.resolve(workRootDirName);
+
+    ImmutableList<Path> toolInputPaths = toolInputs(operationDir, workerExecCmd);
+    System.out.println("toolInputPaths=" + toolInputPaths);
+
+    ImmutableMap<Path, Input> pathInputs = new TreeWalker(execTree).getInputs(operationDir.toAbsolutePath());
+
+    ImmutableSortedMap.Builder<Path, HashCode> workerFileHashBuilder = ImmutableSortedMap.naturalOrder();
+
+    for (Path toolInputPath : toolInputPaths) {
+      Path pathFromRoot = operationDir.resolve(toolInputPath);
+      HashCode toolInputHash = HashCode.fromBytes(pathInputs.get(toolInputPath).getDigest().toByteArray());
+      workerFileHashBuilder.put(pathFromRoot, toolInputHash);
+    }
+    SortedMap<Path, HashCode> workerFilesWithHashes = workerFileHashBuilder.build();
+
+    Hasher hasher = Hashing.sha256().newHasher();
+    workerFilesWithHashes.values().forEach(hashCode ->
+        hasher.putBytes(hashCode.asBytes())
+    );
+    HashCode workerFilesCombinedHash = hasher.hash();
 
     WorkerKey key = new WorkerKey(
         workerExecCmd,
@@ -101,11 +125,9 @@ public class PersistentExecutor {
         cancellable
     );
 
-    ImmutableList<Input> inputs = new TreeWalker(execTree).getInputs(operationDir.toAbsolutePath());
-
     WorkRequest request = WorkRequest.newBuilder()
         .addAllArguments(requestArgs)
-        .addAllInputs(inputs)
+        .addAllInputs(pathInputs.values())
         .setRequestId(0)
         .build();
 
@@ -133,5 +155,28 @@ public class PersistentExecutor {
     }
     System.out.println("Wtf? " + exitCode + "\n" + responseOut);
     return Code.FAILED_PRECONDITION;
+  }
+
+  private static final Set<String> toolSuffixes = ImmutableSet.of(
+      "java",
+      ".jar"
+  );
+
+  // Returns file paths without resolving them from opRoot
+  static ImmutableList<Path> toolInputs(Path opRoot, List<String> args) {
+    return ImmutableList.copyOf(
+      args
+        .stream()
+        .map(s -> {
+          int valueIdx = s.lastIndexOf('=') + 1;
+          return s.substring(valueIdx);
+        })
+        .filter(s ->
+          toolSuffixes.stream().anyMatch(s::endsWith) &&
+              Files.exists(opRoot.resolve(Paths.get(s)))
+        )
+        .map(Paths::get)
+        .iterator()
+    );
   }
 }
