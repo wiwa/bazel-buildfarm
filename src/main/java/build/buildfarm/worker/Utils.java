@@ -38,4 +38,15 @@ public final class Utils {
       throw new IllegalStateException(e);
     }
   }
+
+  // As per JavaBuilder, @@ will escape @
+  public static boolean isFlagFile(String file) {
+    return file.startsWith("@") && !file.startsWith("@@");
+  }
+
+  public static String resolveFlagFiles(Path root, String arg) {
+    return isFlagFile(arg)
+        ? "@" + root.resolve(arg.substring(1)).toAbsolutePath()
+        : arg;
+  }
 }

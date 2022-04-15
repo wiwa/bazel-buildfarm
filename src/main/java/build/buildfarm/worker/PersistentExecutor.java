@@ -1,18 +1,17 @@
 package build.buildfarm.worker;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -54,7 +53,7 @@ public class PersistentExecutor {
       ResourceLimits limits,
       Duration timeout,
       ActionResult.Builder resultBuilder
-  ) {
+  ) throws IOException {
 
     System.out.println("executeCommandOnPersistentWorker[" + operationName + "]");
 
@@ -92,26 +91,38 @@ public class PersistentExecutor {
     );
     String workRootDirName = "work-root_" + executionName + "_" + workRootId;
     Path workRoot = workRootsDir.resolve(workRootDirName);
+    Files.createDirectories(workRoot);
 
-    ImmutableList<Path> toolInputPaths = toolInputs(operationDir, workerExecCmd);
+    ImmutableList<Path> toolInputPaths = ImmutableList.copyOf(
+        filterFiles(operationDir, workerExecCmd).iterator()
+    );
     System.out.println("toolInputPaths=" + toolInputPaths);
 
     ImmutableMap<Path, Input> pathInputs = new TreeWalker(execTree).getInputs(operationDir.toAbsolutePath());
-
-    ImmutableSortedMap.Builder<Path, HashCode> workerFileHashBuilder = ImmutableSortedMap.naturalOrder();
-
-    for (Path toolInputPath : toolInputPaths) {
-      Path pathFromRoot = operationDir.resolve(toolInputPath);
-      HashCode toolInputHash = HashCode.fromBytes(pathInputs.get(toolInputPath).getDigest().toByteArray());
-      workerFileHashBuilder.put(pathFromRoot, toolInputHash);
+    System.out.println("pathInputs:");
+    for (Input in : pathInputs.values()) {
+      System.out.println("\t" + in.getPath());
     }
-    SortedMap<Path, HashCode> workerFilesWithHashes = workerFileHashBuilder.build();
 
     Hasher hasher = Hashing.sha256().newHasher();
-    workerFilesWithHashes.values().forEach(hashCode ->
-        hasher.putBytes(hashCode.asBytes())
-    );
+    ImmutableSortedMap.Builder<Path, HashCode> workerFileHashBuilder = ImmutableSortedMap.naturalOrder();
+
+    for (Path relPath : toolInputPaths) {
+      Path absPathFromOpRoot = operationDir.resolve(relPath).toAbsolutePath();
+      Path absPathFromWorkRoot = workRoot.resolve(relPath).toAbsolutePath();
+      Files.createDirectories(absPathFromWorkRoot.getParent());
+      if (!Files.exists(absPathFromWorkRoot)) {
+        Files.createSymbolicLink(absPathFromWorkRoot, absPathFromOpRoot);
+      }
+
+      HashCode toolInputHash = HashCode.fromBytes(pathInputs.get(absPathFromOpRoot).getDigest().toByteArray());
+      workerFileHashBuilder.put(absPathFromWorkRoot, toolInputHash);
+      hasher.putString(absPathFromWorkRoot.toString(), StandardCharsets.UTF_8);
+      hasher.putBytes(toolInputHash.asBytes());
+    }
+
     HashCode workerFilesCombinedHash = hasher.hash();
+    SortedMap<Path, HashCode> workerFilesWithHashes = workerFileHashBuilder.build();
 
     WorkerKey key = new WorkerKey(
         workerExecCmd,
@@ -125,8 +136,17 @@ public class PersistentExecutor {
         cancellable
     );
 
+    // We assume every non-flagfile argument is not a file or need not be resolved
+    ImmutableList<String> absRequestArgs = ImmutableList.copyOf(
+      requestArgs
+          .stream()
+          .map(arg -> Utils.resolveFlagFiles(operationDir, arg))
+          .iterator()
+    );
+
+
     WorkRequest request = WorkRequest.newBuilder()
-        .addAllArguments(requestArgs)
+        .addAllArguments(absRequestArgs)
         .addAllInputs(pathInputs.values())
         .setRequestId(0)
         .build();
@@ -162,10 +182,9 @@ public class PersistentExecutor {
       ".jar"
   );
 
-  // Returns file paths without resolving them from opRoot
-  static ImmutableList<Path> toolInputs(Path opRoot, List<String> args) {
-    return ImmutableList.copyOf(
-      args
+  // Returns file paths under opRoot without resolving them from opRoot
+  static Stream<Path> filterFiles(Path opRoot, List<String> args) {
+      return args
         .stream()
         .map(s -> {
           int valueIdx = s.lastIndexOf('=') + 1;
@@ -175,8 +194,6 @@ public class PersistentExecutor {
           toolSuffixes.stream().anyMatch(s::endsWith) &&
               Files.exists(opRoot.resolve(Paths.get(s)))
         )
-        .map(Paths::get)
-        .iterator()
-    );
+        .map(Paths::get);
   }
 }

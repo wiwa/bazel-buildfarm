@@ -42,9 +42,7 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
     Set<Path> workerFiles = ImmutableSet.copyOf(key.getWorkerFilesWithHashes().keySet());
     System.out.println("Starting Worker[" + key.getMnemonic() + "] with files: \n" + workerFiles);
 
-    Path execRoot = key.getExecRoot();
-    Files.createDirectories(execRoot);
-    ProcessWrapper processWrapper = new ProcessWrapper(execRoot, initCmd, key.getEnv());
+    ProcessWrapper processWrapper = new ProcessWrapper(key.getExecRoot(), initCmd, key.getEnv());
     this.workerRW = new ProtoWorkerRW(processWrapper);
   }
 
@@ -60,12 +58,11 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
       String reqMsg = "------<" +
           "Got request with args: " +
           request.getArgumentsList() +
-          "Request inputs: " +
-          request.getInputsList() +
           "------>";
       System.out.println(reqMsg);
 
       workerRW.write(request);
+      System.out.println("waitAndRead()");
       response = workerRW.waitAndRead();
       int returnCode = response.getExitCode();
       if (returnCode != 0) {
@@ -149,7 +146,19 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
       PersistentWorker worker = p.getObject();
       Optional<Integer> exitValue = worker.getExitValue();
       if (exitValue.isPresent()) {
-        String msg = String.format("Worker unexpectedly died with exit code %d. Key:\n%s", exitValue.get(), key);
+        String errorStr;
+        try {
+          String err = worker.workerRW.getProcessWrapper().getErrorString();
+          errorStr = "Stderr:\n" + err;
+        } catch (Exception e) {
+          errorStr = "Couldn't read Stderr: " + e;
+        }
+        String msg = String.format(
+            "Worker unexpectedly died with exit code %d. Key:\n%s\n%s",
+            exitValue.get(),
+            key,
+            errorStr
+        );
         System.out.println(msg);
         return false;
       }
