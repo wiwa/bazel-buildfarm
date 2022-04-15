@@ -64,8 +64,7 @@ public class ProcessWrapper implements Closeable {
 
         if (!this.process.isAlive()) {
             int exitVal = this.process.exitValue();
-            String msg = "Process instantly terminated with: " + exitVal + "; " +
-                IOUtils.toString(getStdErr(), StandardCharsets.UTF_8);
+            String msg = "Process instantly terminated with: " + exitVal + "; " + getErrorString();
             throw new IOException(msg);
         }
     }
@@ -84,10 +83,6 @@ public class ProcessWrapper implements Closeable {
 
     public InputStream getStdOut() {
         return this.process.getInputStream();
-    }
-
-    public InputStream getStdErr() throws IOException {
-        return IOUtils.toBufferedInputStream(Files.newInputStream(this.errorFile));
     }
 
     public String getErrorString() throws IOException {

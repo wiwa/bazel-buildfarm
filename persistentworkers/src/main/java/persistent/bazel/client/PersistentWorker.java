@@ -70,10 +70,7 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
         sb.append("Response non-zero exit_code: ");
         sb.append(returnCode);
         sb.append("\n\tProcess stderr: ");
-        IOUtils.readLines(workerRW.getProcessWrapper().getStdErr(), UTF_8).forEach(s -> {
-          sb.append(s);
-          sb.append("\n\t");
-        });
+        sb.append(workerRW.getProcessWrapper().getErrorString());
         System.out.println(sb);
 
         // TODO might be able to remove this; scared that stdout might crash.
