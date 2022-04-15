@@ -5,14 +5,19 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
 import java.io.Closeable;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 import org.apache.commons.io.IOUtils;
 
@@ -26,6 +31,8 @@ public class ProcessWrapper implements Closeable {
 
     private final ImmutableList<String> args;
 
+    private final Path errorFile;
+
     public ProcessWrapper(Path workDir, ImmutableList<String> args) throws IOException {
         this(workDir, args, new HashMap<>());
     }
@@ -38,14 +45,18 @@ public class ProcessWrapper implements Closeable {
             "Process workDir must be a directory, got: " + workDir
         );
 
+        this.errorFile = this.workRoot.resolve(UUID.randomUUID() + ".stderr");
+
         System.out.println("Starting Process:");
         System.out.println("\tcmd: " + this.args);
         System.out.println("\tdir: " + this.workRoot);
         System.out.println("\tenv: " + ImmutableMap.copyOf(env));
+        System.out.println("\tenv: " + errorFile);
         
         ProcessBuilder pb = new ProcessBuilder()
                 .command(this.args)
-                .directory(this.workRoot.toFile());
+                .directory(this.workRoot.toFile())
+                .redirectError(ProcessBuilder.Redirect.to(this.errorFile.toFile()));
 
         pb.environment().putAll(env);
 
@@ -75,8 +86,16 @@ public class ProcessWrapper implements Closeable {
         return this.process.getInputStream();
     }
 
-    public InputStream getStdErr() {
-        return this.process.getErrorStream();
+    public InputStream getStdErr() throws IOException {
+        return IOUtils.toBufferedInputStream(Files.newInputStream(this.errorFile));
+    }
+
+    public String getErrorString() throws IOException {
+        if (Files.exists(this.errorFile)) {
+            return new String(Files.readAllBytes(this.errorFile));
+        } else {
+            return "";
+        }
     }
 
     public boolean isAlive() {
