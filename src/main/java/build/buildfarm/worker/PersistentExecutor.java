@@ -30,6 +30,7 @@ import build.bazel.remote.execution.v2.ActionResult;
 import build.buildfarm.v1test.Tree;
 import build.buildfarm.worker.resources.ResourceLimits;
 import persistent.bazel.client.ProtoWorkerCoordinator;
+import persistent.bazel.client.ProtoWorkerCoordinator.FullResponse;
 import persistent.bazel.client.WorkerKey;
 
 import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
@@ -162,8 +163,11 @@ public class PersistentExecutor {
 
     System.out.println("Request with key: " + key);
     WorkResponse response;
+    String stdErr = "";
     try {
-      response = coordinator.runRequest(key, request);
+      FullResponse fullResponse = coordinator.runRequest(key, request);
+      response = fullResponse.response;
+      stdErr = fullResponse.errorString;
     } catch (Exception e) {
       System.out.println("Exception while running request: " + e.getMessage());
       e.printStackTrace();
@@ -185,8 +189,14 @@ public class PersistentExecutor {
         Path relPath = Paths.get(relOutput);
         Path workPath = workRoot.resolve(relPath);
         Path opPath = operationDir.resolve(relPath);
+        System.out.println("Copying output from " + workPath + " to " + opPath);
         Files.copy(workPath, opPath, REPLACE_EXISTING, COPY_ATTRIBUTES);
       }
+
+      resultBuilder
+          .setExitCode(exitCode)
+          .setStdoutRaw(response.getOutputBytes())
+          .setStderrRaw(ByteString.copyFrom(stdErr, StandardCharsets.UTF_8));
 
       return Code.OK;
     }

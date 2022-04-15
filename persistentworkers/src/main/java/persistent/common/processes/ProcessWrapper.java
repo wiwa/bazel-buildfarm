@@ -14,12 +14,17 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import org.apache.commons.io.IOUtils;
+
+import static java.nio.file.StandardOpenOption.CREATE;
+import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
+import static java.nio.file.StandardOpenOption.WRITE;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -91,6 +96,12 @@ public class ProcessWrapper implements Closeable {
         } else {
             return "";
         }
+    }
+
+    public String flushErrorString() throws IOException {
+        String contents = getErrorString();
+        Files.write(this.errorFile, "".getBytes(), WRITE, TRUNCATE_EXISTING);
+        return contents;
     }
 
     public boolean isAlive() {

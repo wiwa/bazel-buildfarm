@@ -104,6 +104,14 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
         : Optional.empty();
   }
 
+  public String flushStdErr() {
+    try {
+      return this.workerRW.getProcessWrapper().flushErrorString();
+    } catch (IOException ignored) {
+      return "";
+    }
+  }
+
   public static class Supervisor extends BaseKeyedPooledObjectFactory<WorkerKey, PersistentWorker> {
 
     private static Supervisor singleton = null;
