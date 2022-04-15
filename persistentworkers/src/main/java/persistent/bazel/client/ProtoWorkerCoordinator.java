@@ -1,6 +1,5 @@
 package persistent.bazel.client;
 
-import com.google.devtools.build.lib.worker.WorkerProtocol;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 
@@ -18,10 +17,20 @@ public class ProtoWorkerCoordinator {
     return new ProtoWorkerCoordinator(new CommonsWorkerPool(4));
   }
 
-  public WorkResponse runRequest(WorkerKey workerKey, WorkRequest request) throws Exception {
+  public FullResponse runRequest(WorkerKey workerKey, WorkRequest request) throws Exception {
     PersistentWorker worker = workerPool.borrowObject(workerKey);
     WorkResponse response = worker.doWork(request);
+    FullResponse fullResponse = new FullResponse(response, worker.flushStdErr());
     workerPool.returnObject(workerKey, worker);
-    return response;
+    return fullResponse;
+  }
+
+  public static class FullResponse {
+    public final WorkResponse response;
+    public final String errorString;
+
+    public FullResponse(WorkResponse response, String errorString) {
+      this.response = response;
+      this.errorString = errorString;    }
   }
 }

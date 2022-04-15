@@ -54,7 +54,7 @@ public class ProtoWorkerCoordinatorTest {
 
     WorkerProtocol.WorkResponse response;
     try {
-      response = coordinator.runRequest(key, request);
+      response = coordinator.runRequest(key, request).response;
     } catch (Exception e) {
       System.err.println(e.getMessage());
       throw e;
