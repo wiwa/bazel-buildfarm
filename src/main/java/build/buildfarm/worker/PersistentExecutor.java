@@ -217,13 +217,15 @@ public class PersistentExecutor {
     return ImmutableSet.copyOf(
         files
             .stream()
-            .filter(path ->
-                path.startsWith(opRoot.resolve("external/remotejdk11_linux")) ||
-                    path.startsWith(opRoot.resolve("external/remote_java_tools")) ||
-                    path.endsWith("/external/bazel_tools/tools/jdk/platformclasspath.jar") ||
-                    path.endsWith("/scalac.jar") ||
-                    path.endsWith("_deploy.jar")
-            )
+            .filter(path -> {
+              String pathStr = path.toString();
+              return pathStr.contains("external/remotejdk11_linux/") ||
+                  pathStr.contains("external/remote_java_tools/") ||
+                  pathStr.endsWith("/external/bazel_tools/tools/jdk/platformclasspath.jar") ||
+                  pathStr.endsWith("/scalac.jar") ||
+                  pathStr.endsWith("_deploy.jar") ||
+                  pathStr.contains("external/io_bazel_rules_scala/src/java/io/bazel/rulesscala/scalac/scalac.runfiles");
+            })
             .map(opRoot::relativize)
             .iterator()
     );

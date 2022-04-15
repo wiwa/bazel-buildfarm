@@ -65,7 +65,14 @@ public class ProcessWrapper implements Closeable {
 
         pb.environment().putAll(env);
 
-        this.process = pb.start();
+        try {
+            this.process = pb.start();
+        } catch (IOException e) {
+            String msg = "Failed to start process: " + e;
+            System.out.println(msg);
+            e.printStackTrace();
+            throw new IOException(msg, e);
+        }
 
         if (!this.process.isAlive()) {
             int exitVal = this.process.exitValue();
