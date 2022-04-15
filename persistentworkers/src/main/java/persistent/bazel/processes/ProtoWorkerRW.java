@@ -49,7 +49,7 @@ public class ProtoWorkerRW {
     try {
       waitForInput(processWrapper::isAlive, readStream);
     } catch (IOException e) {
-      String stdErrMsg = IOUtils.toString(processWrapper.getStdErr(), StandardCharsets.UTF_8);
+      String stdErrMsg = processWrapper.getErrorString();
       String stdOut = "";
       try {
         if (processWrapper.isAlive() && readStream.available() > 0) {
