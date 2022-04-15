@@ -454,7 +454,7 @@ class Executor {
     usePersistentWorker = usePersistentWorker || isJavaBuilder || isScalac;
 
     if (usePersistentWorker) {
-      System.out.println("usePersistentWorker");
+      logger.log(Level.FINE, "usePersistentWorker");
 
       Tree execTree = workerContext.getQueuedOperation(operationContext.queueEntry).getTree();
 
@@ -470,7 +470,7 @@ class Executor {
         resultBuilder
       );
     } else {
-      System.out.println("don't usePersistentWorker");
+      logger.log(Level.FINE, "don't usePersistentWorker");
     }
 
     // run the action under docker

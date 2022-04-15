@@ -1,12 +1,12 @@
 package persistent.bazel.client;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
@@ -19,13 +19,15 @@ import org.apache.commons.pool2.BaseKeyedPooledObjectFactory;
 import org.apache.commons.pool2.PooledObject;
 import org.apache.commons.pool2.impl.DefaultPooledObject;
 
+import persistent.bazel.processes.ProtoWorkerRW;
 import persistent.common.KeyedWorker;
 import persistent.common.processes.ProcessWrapper;
-import persistent.bazel.processes.ProtoWorkerRW;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, WorkResponse> {
+
+  private static Logger logger = Logger.getLogger(PersistentWorker.class.getName());
 
   private final WorkerKey key;
 
@@ -40,7 +42,8 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
         .build();
 
     Set<Path> workerFiles = ImmutableSet.copyOf(key.getWorkerFilesWithHashes().keySet());
-    System.out.println("Starting Worker[" + key.getMnemonic() + "] with files: \n" + workerFiles);
+    logger.log(Level.FINE,
+        "Starting Worker[" + key.getMnemonic() + "] with files: \n" + workerFiles);
 
     ProcessWrapper processWrapper = new ProcessWrapper(key.getExecRoot(), initCmd, key.getEnv());
     this.workerRW = new ProtoWorkerRW(processWrapper);
@@ -59,10 +62,10 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
           "Got request with args: " +
           request.getArgumentsList() +
           "------>";
-      System.out.println(reqMsg);
+      logger.log(Level.FINE, reqMsg);
 
       workerRW.write(request);
-      System.out.println("waitAndRead()");
+      logger.log(Level.FINE, "waitAndRead()");
       response = workerRW.waitAndRead();
       int returnCode = response.getExitCode();
       if (returnCode != 0) {
@@ -73,7 +76,7 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
         sb.append(response.getOutput());
         sb.append("\n\tProcess stderr: ");
         sb.append(workerRW.getProcessWrapper().getErrorString());
-        System.out.println(sb);
+        logger.log(Level.SEVERE, sb.toString());
 
         // TODO might be able to remove this; scared that stdout might crash.
         StringBuilder sb2 = new StringBuilder();
@@ -82,12 +85,12 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
           sb2.append(s);
           sb2.append("\n\t");
         });
-        System.out.println(sb2);
+        logger.log(Level.SEVERE, sb2.toString());
       }
     } catch (IOException e) {
-      System.out.println("IO Failing with : " + e.getMessage());
+      logger.log(Level.SEVERE, "IO Failing with : " + e.getMessage());
     } catch (Exception e) {
-      System.out.println("Failing with : " + e.getMessage());
+      logger.log(Level.SEVERE, "Failing with : " + e.getMessage());
     }
     return response;
   }
@@ -134,17 +137,19 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
     }
 
 
-    /** When a worker process is discarded, destroy its process, too. */
+    /**
+     * When a worker process is discarded, destroy its process, too.
+     */
     @Override
     public void destroyObject(WorkerKey key, PooledObject<PersistentWorker> p) {
       StringBuilder msgBuilder = new StringBuilder();
       msgBuilder.append("Destroying worker from WorkerKey: ");
       msgBuilder.append(key);
-      for (StackTraceElement e: Thread.currentThread().getStackTrace()) {
+      for (StackTraceElement e : Thread.currentThread().getStackTrace()) {
         msgBuilder.append("\n\t");
         msgBuilder.append(e);
       }
-      System.out.println(msgBuilder);
+      logger.log(Level.SEVERE, msgBuilder.toString());
       p.getObject().destroy();
     }
 
@@ -166,7 +171,7 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
             key,
             errorStr
         );
-        System.out.println(msg);
+        logger.log(Level.SEVERE, msg);
         return false;
       }
       boolean filesChanged =
@@ -191,7 +196,7 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
                 .append(newHash != null ? newHash : "<none>");
           }
         }
-        System.out.println(msg);
+        logger.log(Level.SEVERE, msg.toString());
       }
 
       return !filesChanged;
