@@ -69,6 +69,8 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
         StringBuilder sb = new StringBuilder();
         sb.append("Response non-zero exit_code: ");
         sb.append(returnCode);
+        sb.append("Response output: ");
+        sb.append(response.getOutput());
         sb.append("\n\tProcess stderr: ");
         sb.append(workerRW.getProcessWrapper().getErrorString());
         System.out.println(sb);

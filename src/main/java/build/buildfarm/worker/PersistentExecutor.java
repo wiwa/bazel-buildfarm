@@ -136,18 +136,23 @@ public class PersistentExecutor {
         cancellable
     );
 
-    // We assume every non-flagfile argument is not a file or need not be resolved
-    ImmutableList<String> absRequestArgs = ImmutableList.copyOf(
-      requestArgs
-          .stream()
-          .map(arg -> Utils.resolveFlagFiles(operationDir, arg))
-          .iterator()
-    );
+    ImmutableList.Builder<Input> workRootInputs = ImmutableList.builder();
 
+    for (Map.Entry<Path, Input> pathInput : pathInputs.entrySet()) {
+      Path opRootPath = pathInput.getKey();
+      Path relPath = operationDir.relativize(opRootPath);
+      Path workRootPath = workRoot.resolve(relPath);
+      Input workRootInput = pathInput.getValue().toBuilder().setPath(workRootPath.toString()).build();
+
+      Files.deleteIfExists(workRootPath);
+      Files.createSymbolicLink(workRootPath, opRootPath);
+
+      workRootInputs.add(workRootInput);
+    }
 
     WorkRequest request = WorkRequest.newBuilder()
-        .addAllArguments(absRequestArgs)
-        .addAllInputs(pathInputs.values())
+        .addAllArguments(requestArgs)
+        .addAllInputs(workRootInputs.build())
         .setRequestId(0)
         .build();
 
