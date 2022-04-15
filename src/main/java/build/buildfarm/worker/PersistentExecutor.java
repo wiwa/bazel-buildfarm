@@ -5,13 +5,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.SortedMap;
 import java.util.logging.Logger;
-import java.util.stream.Stream;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -32,6 +31,9 @@ import build.buildfarm.v1test.Tree;
 import build.buildfarm.worker.resources.ResourceLimits;
 import persistent.bazel.client.ProtoWorkerCoordinator;
 import persistent.bazel.client.WorkerKey;
+
+import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
 public class PersistentExecutor {
   private static Logger logger = Logger.getLogger(PersistentExecutor.class.getName());
@@ -93,16 +95,15 @@ public class PersistentExecutor {
     Path workRoot = workRootsDir.resolve(workRootDirName);
     Files.createDirectories(workRoot);
 
-    ImmutableList<Path> toolInputPaths = ImmutableList.copyOf(
-        filterFiles(operationDir, workerExecCmd).iterator()
-    );
-    System.out.println("toolInputPaths=" + toolInputPaths);
-
-    ImmutableMap<Path, Input> pathInputs = new TreeWalker(execTree).getInputs(operationDir.toAbsolutePath());
+    ImmutableMap<Path, Input> pathInputs = new TreeWalker(execTree).getInputs(
+        operationDir.toAbsolutePath());
     System.out.println("pathInputs:");
     for (Input in : pathInputs.values()) {
       System.out.println("\t" + in.getPath());
     }
+
+    ImmutableSet<Path> toolInputPaths = getToolFiles(operationDir, pathInputs.keySet().asList());
+    System.out.println("toolInputPaths=" + toolInputPaths);
 
     Hasher hasher = Hashing.sha256().newHasher();
     ImmutableSortedMap.Builder<Path, HashCode> workerFileHashBuilder = ImmutableSortedMap.naturalOrder();
@@ -111,11 +112,11 @@ public class PersistentExecutor {
       Path absPathFromOpRoot = operationDir.resolve(relPath).toAbsolutePath();
       Path absPathFromWorkRoot = workRoot.resolve(relPath).toAbsolutePath();
       Files.createDirectories(absPathFromWorkRoot.getParent());
-      if (!Files.exists(absPathFromWorkRoot)) {
-        Files.createSymbolicLink(absPathFromWorkRoot, absPathFromOpRoot);
-      }
 
-      HashCode toolInputHash = HashCode.fromBytes(pathInputs.get(absPathFromOpRoot).getDigest().toByteArray());
+      Files.copy(absPathFromOpRoot, absPathFromWorkRoot, REPLACE_EXISTING, COPY_ATTRIBUTES);
+
+      HashCode toolInputHash = HashCode.fromBytes(
+          pathInputs.get(absPathFromOpRoot).getDigest().toByteArray());
       workerFileHashBuilder.put(absPathFromWorkRoot, toolInputHash);
       hasher.putString(absPathFromWorkRoot.toString(), StandardCharsets.UTF_8);
       hasher.putBytes(toolInputHash.asBytes());
@@ -142,10 +143,14 @@ public class PersistentExecutor {
       Path opRootPath = pathInput.getKey();
       Path relPath = operationDir.relativize(opRootPath);
       Path workRootPath = workRoot.resolve(relPath);
-      Input workRootInput = pathInput.getValue().toBuilder().setPath(workRootPath.toString()).build();
+      Input workRootInput = pathInput.getValue().toBuilder().setPath(
+          workRootPath.toString()).build();
 
-      Files.deleteIfExists(workRootPath);
-      Files.createSymbolicLink(workRootPath, opRootPath);
+      if (!toolInputPaths.contains(relPath)) {
+        Files.deleteIfExists(workRootPath);
+        Files.createDirectories(workRootPath.getParent());
+        Files.createSymbolicLink(workRootPath, opRootPath);
+      }
 
       workRootInputs.add(workRootInput);
     }
@@ -182,23 +187,20 @@ public class PersistentExecutor {
     return Code.FAILED_PRECONDITION;
   }
 
-  private static final Set<String> toolSuffixes = ImmutableSet.of(
-      "java",
-      ".jar"
-  );
-
-  // Returns file paths under opRoot without resolving them from opRoot
-  static Stream<Path> filterFiles(Path opRoot, List<String> args) {
-      return args
-        .stream()
-        .map(s -> {
-          int valueIdx = s.lastIndexOf('=') + 1;
-          return s.substring(valueIdx);
-        })
-        .filter(s ->
-          toolSuffixes.stream().anyMatch(s::endsWith) &&
-              Files.exists(opRoot.resolve(Paths.get(s)))
-        )
-        .map(Paths::get);
+  // Returns file paths under opRoot after relativizing them via opRoot
+  static ImmutableSet<Path> getToolFiles(Path opRoot, List<Path> files) {
+    return ImmutableSet.copyOf(
+        files
+            .stream()
+            .filter(path ->
+                path.startsWith(opRoot.resolve("external/remotejdk11_linux")) ||
+                    path.startsWith(opRoot.resolve("external/remote_java_tools")) ||
+                    path.endsWith("/external/bazel_tools/tools/jdk/platformclasspath.jar") ||
+                    path.endsWith("/scalac.jar") ||
+                    path.endsWith("_deploy.jar")
+            )
+            .map(opRoot::relativize)
+            .iterator()
+    );
   }
 }
