@@ -5,11 +5,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.SortedMap;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.google.common.collect.ImmutableList;
@@ -37,6 +37,7 @@ import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
 public class PersistentExecutor {
+
   private static Logger logger = Logger.getLogger(PersistentExecutor.class.getName());
 
   private static final ProtoWorkerCoordinator coordinator = ProtoWorkerCoordinator.ofCommonsPool();
@@ -59,7 +60,7 @@ public class PersistentExecutor {
       ActionResult.Builder resultBuilder
   ) throws IOException {
 
-    System.out.println("executeCommandOnPersistentWorker[" + operationName + "]");
+    logger.log(Level.FINE, "executeCommandOnPersistentWorker[" + operationName + "]");
 
     ImmutableList<String> argsList = ImmutableList.copyOf(arguments);
 
@@ -73,7 +74,7 @@ public class PersistentExecutor {
       executionName = "JavaBuilder";
       env = ImmutableMap.of();
     } else if (!isScalac) {
-      System.out.println("Invalid Argument?!");
+      logger.log(Level.SEVERE, "Invalid Argument?!");
       return Code.INVALID_ARGUMENT;
     }
 
@@ -99,13 +100,13 @@ public class PersistentExecutor {
 
     ImmutableMap<Path, Input> pathInputs = new TreeWalker(execTree).getInputs(
         operationDir.toAbsolutePath());
-    System.out.println("pathInputs:");
+    logger.log(Level.FINE, "pathInputs:");
     for (Input in : pathInputs.values()) {
-      System.out.println("\t" + in.getPath());
+      logger.log(Level.FINE, "\t" + in.getPath());
     }
 
     ImmutableSet<Path> toolInputPaths = getToolFiles(operationDir, pathInputs.keySet().asList());
-    System.out.println("toolInputPaths=" + toolInputPaths);
+    logger.log(Level.FINE, "toolInputPaths=" + toolInputPaths);
 
     Hasher hasher = Hashing.sha256().newHasher();
     ImmutableSortedMap.Builder<Path, HashCode> workerFileHashBuilder = ImmutableSortedMap.naturalOrder();
@@ -161,7 +162,7 @@ public class PersistentExecutor {
         .setRequestId(0)
         .build();
 
-    System.out.println("Request with key: " + key);
+    logger.log(Level.FINE, "Request with key: " + key);
     WorkResponse response;
     String stdErr = "";
     try {
@@ -169,7 +170,7 @@ public class PersistentExecutor {
       response = fullResponse.response;
       stdErr = fullResponse.errorString;
     } catch (Exception e) {
-      System.out.println("Exception while running request: " + e.getMessage());
+      logger.log(Level.SEVERE, "Exception while running request: " + e.getMessage());
       e.printStackTrace();
       response = WorkResponse.newBuilder()
           .setOutput("Exception while running request: " + e)
@@ -178,25 +179,25 @@ public class PersistentExecutor {
     }
 
     String responseOut = response.getOutput();
-    System.out.println("WorkResponse.output: " + responseOut);
+    logger.log(Level.FINE, "WorkResponse.output: " + responseOut);
     resultBuilder.setStdoutRaw(ByteString.copyFromUtf8(responseOut));
 
     int exitCode = response.getExitCode();
 
     if (exitCode == 0) {
       // Why is paths empty when files are not?
-      System.out.println("getOutputPathsList:");
-      System.out.println(operationContext.command.getOutputPathsList());
-      System.out.println("getOutputFilesList:");
-      System.out.println(operationContext.command.getOutputFilesList());
-      System.out.println("getOutputDirectoriesList:");
-      System.out.println(operationContext.command.getOutputDirectoriesList());
+      logger.log(Level.FINE, "getOutputPathsList:");
+      logger.log(Level.FINE, operationContext.command.getOutputPathsList().toString());
+      logger.log(Level.FINE, "getOutputFilesList:");
+      logger.log(Level.FINE, operationContext.command.getOutputFilesList().toString());
+      logger.log(Level.FINE, "getOutputDirectoriesList:");
+      logger.log(Level.FINE, operationContext.command.getOutputDirectoriesList().toString());
 
       for (String relOutput : operationContext.command.getOutputFilesList()) {
         Path relPath = Paths.get(relOutput);
         Path workPath = workRoot.resolve(relPath);
         Path opPath = operationDir.resolve(relPath);
-        System.out.println("Copying output from " + workPath + " to " + opPath);
+        logger.log(Level.FINE, "Copying output from " + workPath + " to " + opPath);
         Files.copy(workPath, opPath, REPLACE_EXISTING, COPY_ATTRIBUTES);
       }
 
@@ -213,7 +214,7 @@ public class PersistentExecutor {
 
       return Code.OK;
     }
-    System.out.println("Wtf? " + exitCode + "\n" + responseOut);
+    logger.log(Level.SEVERE, "Wtf? " + exitCode + "\n" + responseOut);
     return Code.FAILED_PRECONDITION;
   }
 
@@ -229,7 +230,8 @@ public class PersistentExecutor {
                   pathStr.endsWith("/external/bazel_tools/tools/jdk/platformclasspath.jar") ||
                   pathStr.endsWith("/scalac.jar") ||
                   pathStr.endsWith("_deploy.jar") ||
-                  pathStr.contains("external/io_bazel_rules_scala/src/java/io/bazel/rulesscala/scalac/scalac.runfiles");
+                  pathStr.contains(
+                      "external/io_bazel_rules_scala/src/java/io/bazel/rulesscala/scalac/scalac.runfiles");
             })
             .map(opRoot::relativize)
             .iterator()
