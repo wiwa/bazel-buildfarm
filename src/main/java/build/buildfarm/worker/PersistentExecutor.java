@@ -184,8 +184,16 @@ public class PersistentExecutor {
     int exitCode = response.getExitCode();
 
     if (exitCode == 0) {
+      // Why is paths empty when files are not?
+      System.out.println("getOutputPathsList:");
+      System.out.println(operationContext.command.getOutputPathsList());
+      System.out.println("getOutputFilesList:");
+      System.out.println(operationContext.command.getOutputFilesList());
+      System.out.println("getOutputDirectoriesList:");
+      System.out.println(operationContext.command.getOutputDirectoriesList());
 
-      for (String relOutput : operationContext.command.getOutputPathsList()) {
+      // TODO what about directories?
+      for (String relOutput : operationContext.command.getOutputFilesList()) {
         Path relPath = Paths.get(relOutput);
         Path workPath = workRoot.resolve(relPath);
         Path opPath = operationDir.resolve(relPath);

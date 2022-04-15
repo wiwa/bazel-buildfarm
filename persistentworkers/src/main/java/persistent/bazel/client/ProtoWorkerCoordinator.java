@@ -31,6 +31,7 @@ public class ProtoWorkerCoordinator {
 
     public FullResponse(WorkResponse response, String errorString) {
       this.response = response;
-      this.errorString = errorString;    }
+      this.errorString = errorString;
+    }
   }
 }
