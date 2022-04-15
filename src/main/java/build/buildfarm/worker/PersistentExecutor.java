@@ -192,13 +192,18 @@ public class PersistentExecutor {
       System.out.println("getOutputDirectoriesList:");
       System.out.println(operationContext.command.getOutputDirectoriesList());
 
-      // TODO what about directories?
       for (String relOutput : operationContext.command.getOutputFilesList()) {
         Path relPath = Paths.get(relOutput);
         Path workPath = workRoot.resolve(relPath);
         Path opPath = operationDir.resolve(relPath);
         System.out.println("Copying output from " + workPath + " to " + opPath);
         Files.copy(workPath, opPath, REPLACE_EXISTING, COPY_ATTRIBUTES);
+      }
+
+      // ??? see DockerExecutor::copyOutputsOutOfContainer
+      for (String outputDir : operationContext.command.getOutputDirectoriesList()) {
+        Path outputDirPath = operationDir.resolve(outputDir);
+        outputDirPath.toFile().mkdirs();
       }
 
       resultBuilder
