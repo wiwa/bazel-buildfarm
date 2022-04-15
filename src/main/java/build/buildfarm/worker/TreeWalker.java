@@ -1,11 +1,9 @@
 package build.buildfarm.worker;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Map;
 
-import com.google.common.collect.ImmutableList;
-import com.google.devtools.build.lib.worker.WorkerProtocol;
+import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
 
 import build.bazel.remote.execution.v2.Digest;
@@ -23,20 +21,25 @@ public class TreeWalker {
     this.proxyDirs = DigestUtil.proxyDirectoriesIndex(tree.getDirectoriesMap());
   }
 
-  public ImmutableList<Input> getInputs(Path rootPath) {
-    ImmutableList.Builder<Input> accumulator = ImmutableList.builder();
-    Directory rootDir = proxyDirs.get(this.tree.getRootDigest());
+  public ImmutableMap<Path, Input> getInputs(Path rootPath) {
+    ImmutableMap.Builder<Path, Input> accumulator = ImmutableMap.builder();
+    Directory rootDir = proxyDirs.get(tree.getRootDigest());
     return getInputsFromDir(rootPath, rootDir, accumulator).build();
   }
 
-  private ImmutableList.Builder<Input> getInputsFromDir(Path dirPath, Directory dir, ImmutableList.Builder<Input> acc) {
-    dir.getFilesList().forEach(fileNode ->
-        acc.add(
-            Input.newBuilder()
-                .setPath(dirPath.resolve(fileNode.getName()).toString())
-                .setDigest(fileNode.getDigest().getHashBytes())
-                .build()
-        )
+  private ImmutableMap.Builder<Path, Input> getInputsFromDir(
+      Path dirPath, Directory dir, ImmutableMap.Builder<Path, Input> acc
+  ) {
+    dir.getFilesList().forEach(fileNode -> {
+          Path path = dirPath.resolve(fileNode.getName()).normalize();
+          acc.put(
+              path,
+              Input.newBuilder()
+                  .setPath(path.toString())
+                  .setDigest(fileNode.getDigest().getHashBytes())
+                  .build()
+          );
+        }
     );
 
     // Recurse into subdirectories

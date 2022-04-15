@@ -2,11 +2,14 @@ package persistent.bazel.client;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeSet;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.HashCode;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
@@ -35,7 +38,13 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
         .addAll(key.getCmd())
         .addAll(key.getArgs())
         .build();
-    ProcessWrapper processWrapper = new ProcessWrapper(key.getExecRoot(), initCmd, key.getEnv());
+
+    Set<Path> workerFiles = ImmutableSet.copyOf(key.getWorkerFilesWithHashes().keySet());
+    System.out.println("Starting Worker[" + key.getMnemonic() + "] with files: \n" + workerFiles);
+
+    Path execRoot = key.getExecRoot();
+    Files.createDirectories(execRoot);
+    ProcessWrapper processWrapper = new ProcessWrapper(execRoot, initCmd, key.getEnv());
     this.workerRW = new ProtoWorkerRW(processWrapper);
   }
 
