@@ -47,6 +47,7 @@ public class PersistentExecutor {
   static final String JAVABUILDER_JAR = "external/remote_java_tools/java_tools/JavaBuilder_deploy.jar";
 
   static Code runOnPersistentWorker(
+      OperationContext operationContext,
       String operationName,
       Tree execTree,
       Path operationDir,
@@ -179,6 +180,14 @@ public class PersistentExecutor {
     int exitCode = response.getExitCode();
 
     if (exitCode == 0) {
+
+      for (String relOutput : operationContext.command.getOutputPathsList()) {
+        Path relPath = Paths.get(relOutput);
+        Path workPath = workRoot.resolve(relPath);
+        Path opPath = operationDir.resolve(relPath);
+        Files.copy(workPath, opPath, REPLACE_EXISTING, COPY_ATTRIBUTES);
+      }
+
       return Code.OK;
     }
     System.out.println("Wtf? " + exitCode + "\n" + responseOut);
