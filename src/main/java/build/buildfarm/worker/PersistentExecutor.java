@@ -112,7 +112,6 @@ public class PersistentExecutor {
       Path absPathFromOpRoot = operationDir.resolve(relPath).toAbsolutePath();
       Path absPathFromWorkRoot = workRoot.resolve(relPath).toAbsolutePath();
       Files.createDirectories(absPathFromWorkRoot.getParent());
-
       Files.copy(absPathFromOpRoot, absPathFromWorkRoot, REPLACE_EXISTING, COPY_ATTRIBUTES);
 
       HashCode toolInputHash = HashCode.fromBytes(
@@ -147,9 +146,8 @@ public class PersistentExecutor {
           workRootPath.toString()).build();
 
       if (!toolInputPaths.contains(relPath)) {
-        Files.deleteIfExists(workRootPath);
         Files.createDirectories(workRootPath.getParent());
-        Files.createSymbolicLink(workRootPath, opRootPath);
+        Files.copy(opRootPath, workRootPath, REPLACE_EXISTING, COPY_ATTRIBUTES);
       }
 
       workRootInputs.add(workRootInput);
