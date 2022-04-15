@@ -36,6 +36,7 @@ import build.buildfarm.common.Write.NullWrite;
 import build.buildfarm.v1test.ExecutingOperationMetadata;
 import build.buildfarm.v1test.ExecutionPolicy;
 import build.buildfarm.v1test.ExecutionWrapper;
+import build.buildfarm.v1test.Tree;
 import build.buildfarm.worker.WorkerContext.IOResource;
 import build.buildfarm.worker.resources.ResourceLimits;
 import com.github.dockerjava.api.DockerClient;
@@ -453,9 +454,12 @@ class Executor {
 
     if (usePersistentWorker) {
       System.out.println("usePersistentWorker");
+
+      Tree execTree = workerContext.getQueuedOperation(operationContext.queueEntry).getTree();
+
       return PersistentExecutor.runOnPersistentWorker(
-        operationContext,
         operationName,
+        execTree,
         execDir,
         arguments,
         environment,

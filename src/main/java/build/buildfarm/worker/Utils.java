@@ -14,16 +14,18 @@
 
 package build.buildfarm.worker;
 
-import static build.buildfarm.common.io.Utils.stat;
-
-import build.buildfarm.common.io.FileStatus;
 import java.io.IOException;
 import java.nio.file.FileStore;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 
+import build.buildfarm.common.io.FileStatus;
+
+import static build.buildfarm.common.io.Utils.stat;
+
 public final class Utils {
-  private Utils() {}
+  private Utils() {
+  }
 
   public static FileStatus statIfFound(Path path, boolean followSymlinks, FileStore fileStore) {
     try {

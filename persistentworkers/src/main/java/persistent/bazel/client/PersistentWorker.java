@@ -48,7 +48,14 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
   public WorkResponse doWork(WorkRequest request) {
     WorkResponse response = null;
     try {
-      System.out.println("Got request with args: " + request.getArgumentsList());
+      String reqMsg = "------<" +
+          "Got request with args: " +
+          request.getArgumentsList() +
+          "Request inputs: " +
+          request.getInputsList() +
+          "------>";
+      System.out.println(reqMsg);
+
       workerRW.write(request);
       response = workerRW.waitAndRead();
       int returnCode = response.getExitCode();
@@ -142,7 +149,8 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
 
       if (filesChanged) {
         StringBuilder msg = new StringBuilder();
-        msg.append("Worker can no longer be used, because its files have changed on disk:\n" + key);
+        msg.append("Worker can no longer be used, because its files have changed on disk:\n");
+        msg.append(key);
         TreeSet<Path> files = new TreeSet<>();
         files.addAll(key.getWorkerFilesWithHashes().keySet());
         files.addAll(worker.key.getWorkerFilesWithHashes().keySet());
