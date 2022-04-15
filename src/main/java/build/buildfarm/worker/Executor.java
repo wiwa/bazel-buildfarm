@@ -458,6 +458,7 @@ class Executor {
       Tree execTree = workerContext.getQueuedOperation(operationContext.queueEntry).getTree();
 
       return PersistentExecutor.runOnPersistentWorker(
+        operationContext,
         operationName,
         execTree,
         execDir,
