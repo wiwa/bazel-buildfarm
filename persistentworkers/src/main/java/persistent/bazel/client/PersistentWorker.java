@@ -1,6 +1,7 @@
 package persistent.bazel.client;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.TreeSet;
@@ -10,6 +11,7 @@ import com.google.common.hash.HashCode;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.pool2.BaseKeyedPooledObjectFactory;
 import org.apache.commons.pool2.PooledObject;
 import org.apache.commons.pool2.impl.DefaultPooledObject;
@@ -17,6 +19,8 @@ import org.apache.commons.pool2.impl.DefaultPooledObject;
 import persistent.common.KeyedWorker;
 import persistent.common.processes.ProcessWrapper;
 import persistent.bazel.processes.ProtoWorkerRW;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, WorkResponse> {
 
@@ -42,16 +46,38 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
 
   @Override
   public WorkResponse doWork(WorkRequest request) {
+    WorkResponse response = null;
     try {
       System.out.println("Got request with args: " + request.getArgumentsList());
       workerRW.write(request);
-      return workerRW.waitAndRead();
+      response = workerRW.waitAndRead();
+      int returnCode = response.getExitCode();
+      if (returnCode != 0) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Response non-zero exit_code: ");
+        sb.append(returnCode);
+        sb.append("\n\tProcess stderr: ");
+        IOUtils.readLines(workerRW.getProcessWrapper().getStdErr(), UTF_8).forEach(s -> {
+          sb.append(s);
+          sb.append("\n\t");
+        });
+        System.out.println(sb);
+
+        // TODO might be able to remove this; scared that stdout might crash.
+        StringBuilder sb2 = new StringBuilder();
+        sb2.append("\n\tProcess stdout: ");
+        IOUtils.readLines(workerRW.getProcessWrapper().getStdOut(), UTF_8).forEach(s -> {
+          sb2.append(s);
+          sb2.append("\n\t");
+        });
+        System.out.println(sb2);
+      }
     } catch (IOException e) {
       System.out.println("IO Failing with : " + e.getMessage());
     } catch (Exception e) {
       System.out.println("Failing with : " + e.getMessage());
     }
-    return null;
+    return response;
   }
 
   @Override
