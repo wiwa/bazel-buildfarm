@@ -6,3 +6,9 @@ build:fuse --define=fuse=true
 build:linux --sandbox_tmpfs_path=/tmp
 
 test --test_tag_filters=-redis
+build:remcache --repository_cache=./bf-cache/bazel/repo
+query:remcache --repository_cache=./bf-cache/bazel/repo
+fetch:remcache --repository_cache=./bf-cache/bazel/repo
+build:remcache --disk_cache=./bf-cache/bazel/buildcache
+query:remcache --disk_cache=./bf-cache/bazel/buildcache
+fetch:remcache --disk_cache=./bf-cache/bazel/buildcache
