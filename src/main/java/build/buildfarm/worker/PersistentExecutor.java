@@ -114,11 +114,7 @@ public class PersistentExecutor {
 
     ImmutableMap<Path, Input> pathInputs = new TreeWalker(execTree).getInputs(
         operationDir.toAbsolutePath());
-    logger.log(Level.FINE, "pathInputs:");
-    for (Input in : pathInputs.values()) {
-      logger.log(Level.FINE, "\t" + in.getPath());
-    }
-
+    logger.log(Level.FINE, "pathInputs: " + pathInputs.keySet());
 
     ImmutableList<Path> absInputPaths = pathInputs.keySet().asList();
     ImmutableSet<Path> toolInputPaths = getToolFiles(operationDir, absInputPaths);
@@ -182,8 +178,13 @@ public class PersistentExecutor {
 
     ImmutableList<Input> reqInputs = pathInputs.values().asList();
 
+    ImmutableList<String> argsWithOpRoot = ImmutableList.<String>builder()
+        .add(operationDir.toString())
+        .addAll(requestArgs)
+        .build();
+
     WorkRequest request = WorkRequest.newBuilder()
-        .addAllArguments(requestArgs)
+        .addAllArguments(argsWithOpRoot)
         .addAllInputs(reqInputs)
         .setRequestId(0)
         .build();
