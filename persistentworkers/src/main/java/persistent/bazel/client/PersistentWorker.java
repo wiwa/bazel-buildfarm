@@ -155,8 +155,10 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
         logger.log(Level.SEVERE, sb2.toString());
       }
     } catch (IOException e) {
+      e.printStackTrace();
       logger.log(Level.SEVERE, "IO Failing with : " + e.getMessage());
     } catch (Exception e) {
+      e.printStackTrace();
       logger.log(Level.SEVERE, "Failing with : " + e.getMessage());
     }
     return response;
@@ -170,13 +172,20 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
       }
     }
     if (!relArgsfiles.isEmpty()) {
-      for (Input input : request.getInputsList()) {
-        String path = input.getPath();
-        for (String relFile : relArgsfiles) {
-          if (path.endsWith(relFile)) {
+      for (String relFile : relArgsfiles) {
+        boolean copied = false;
+        for (Input input : request.getInputsList()) {
+          String inputPath = input.getPath();
+          if (inputPath.endsWith(relFile)) {
             Path absArgsfile = execRoot.resolve(relFile);
-            Files.copy(Paths.get(path), absArgsfile, REPLACE_EXISTING, COPY_ATTRIBUTES);
+            Files.createDirectories(absArgsfile.getParent());
+            Files.copy(Paths.get(inputPath), absArgsfile, REPLACE_EXISTING, COPY_ATTRIBUTES);
+            copied = true;
+            break;
           }
+        }
+        if (!copied) {
+          throw new IOException("Did not copy argfile: " + relFile);
         }
       }
     }
