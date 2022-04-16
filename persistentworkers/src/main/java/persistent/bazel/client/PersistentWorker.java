@@ -18,7 +18,6 @@ import java.util.stream.Collectors;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.HashCode;
-import com.google.devtools.build.lib.worker.WorkerProtocol;
 import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
@@ -33,7 +32,6 @@ import persistent.common.KeyedWorker;
 import persistent.common.processes.ProcessWrapper;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
@@ -58,31 +56,36 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
     }
     this.execRoot = workerSetRoot.resolve(uuid);
 
-    loadToolInputFiles();
+    Set<String> tools = loadToolInputFiles();
 
     ImmutableList.Builder<String> builder = ImmutableList.builder();
+
+    ImmutableList<String> cmd = ImmutableList.copyOf(absPathTools(key.getCmd(), tools));
+
     ImmutableList<String> initCmd = builder
-        .addAll(key.getCmd())
+        .addAll(cmd)
         .addAll(key.getArgs())
         .build();
 
     Set<Path> workerFiles = ImmutableSet.copyOf(key.getWorkerFilesWithHashes().keySet());
     logger.log(Level.FINE,
-        "Starting Worker[" + key.getMnemonic() + "] with files: \n" + workerFiles);
+        "Starting Worker[" + key.getMnemonic() + "](" + cmd + ") with files: \n" + workerFiles);
 
     ProcessWrapper processWrapper = new ProcessWrapper(execRoot, initCmd, key.getEnv());
     this.workerRW = new ProtoWorkerRW(processWrapper);
   }
 
-  private void loadToolInputFiles() throws IOException {
-    System.out.println("loadToolInputFiles()!: " + key.getExecRoot().relativize(execRoot));
+  private Set<String> loadToolInputFiles() throws IOException {
+    logger.log(Level.FINE, "loadToolInputFiles()!: " + key.getExecRoot().relativize(execRoot));
+    Set<String> relToolPaths = new HashSet<>();
     Path toolInputRoot = key.getExecRoot().resolve(TOOL_INPUT_SUBDIR);
     for (Path toolInputAbsPath : key.getWorkerFilesWithHashes().keySet()) {
       Path relPath = toolInputRoot.relativize(toolInputAbsPath);
+      relToolPaths.add(relPath.toString());
       Path execRootPath = execRoot.resolve(relPath);
       Files.createDirectories(execRootPath.getParent());
       if (!Files.exists(execRootPath)) {
-        System.out.println("Copying tool " + toolInputAbsPath + " to " + execRootPath);
+        logger.log(Level.FINE, "Copying tool " + toolInputAbsPath + " to " + execRootPath);
         Files.copy(
             toolInputAbsPath,
             execRootPath,
@@ -91,6 +94,23 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
         );
       }
     }
+    return relToolPaths;
+  }
+
+  private List<String> absPathTools(List<String> cmd, Set<String> tools) {
+    return cmd
+        .stream()
+        .map(arg -> {
+          try {
+            String absPath = execRoot.resolve(Paths.get(arg)).toString();
+            if (tools.contains(absPath)) {
+              return absPath;
+            }
+          } catch (Exception ignore) {
+          }
+          return arg;
+        })
+        .collect(Collectors.toList());
   }
 
   @Override
