@@ -119,8 +119,15 @@ public class PersistentExecutor {
       logger.log(Level.FINE, "\t" + in.getPath());
     }
 
-    ImmutableSet<Path> toolInputPaths = getToolFiles(operationDir, pathInputs.keySet().asList());
+
+    ImmutableList<Path> absInputPaths = pathInputs.keySet().asList();
+    ImmutableSet<Path> toolInputPaths = getToolFiles(operationDir, absInputPaths);
     logger.log(Level.FINE, "toolInputPaths=" + toolInputPaths);
+
+    Path binary = Paths.get(workerExecCmd.get(0));
+    if (!toolInputPaths.contains(binary) && !binary.isAbsolute()) {
+      throw new IllegalArgumentException("Binary isn't a tool?! " + binary);
+    }
 
     Hasher hasher = Hashing.sha256().newHasher();
     ImmutableSortedMap.Builder<Path, HashCode> workerFileHashBuilder = ImmutableSortedMap.naturalOrder();
@@ -128,8 +135,11 @@ public class PersistentExecutor {
     for (Path relPath : toolInputPaths) {
       Path absPathFromOpRoot = operationDir.resolve(relPath).toAbsolutePath();
       Path absPathFromToolsRoot = toolsRoot.resolve(relPath).toAbsolutePath();
-      // Files.createDirectories(absPathFromToolsRoot.getParent());
-      // Files.copy(absPathFromOpRoot, absPathFromToolsRoot, REPLACE_EXISTING, COPY_ATTRIBUTES);
+      Files.createDirectories(absPathFromToolsRoot.getParent());
+      if (!Files.exists(absPathFromToolsRoot)) {
+        logger.log(Level.FINE, "Toolcopy: " + absPathFromOpRoot + " to " + absPathFromToolsRoot);
+        Files.copy(absPathFromOpRoot, absPathFromToolsRoot, REPLACE_EXISTING, COPY_ATTRIBUTES);
+      }
 
       HashCode toolInputHash = HashCode.fromBytes(
           pathInputs.get(absPathFromOpRoot).getDigest().toByteArray());
@@ -247,6 +257,7 @@ public class PersistentExecutor {
                   pathStr.endsWith("/external/bazel_tools/tools/jdk/platformclasspath.jar") ||
                   pathStr.endsWith("/scalac.jar") ||
                   pathStr.endsWith("_deploy.jar") ||
+                  pathStr.endsWith("scalac/scalac") ||
                   pathStr.contains(
                       "external/io_bazel_rules_scala/src/java/io/bazel/rulesscala/scalac/scalac.runfiles");
             })
