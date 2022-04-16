@@ -129,6 +129,16 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
           "------>";
       logger.log(Level.FINE, reqMsg);
 
+      Path opRoot = Paths.get(request.getArgumentsList().get(0));
+      for (Input input : request.getInputsList()) {
+        Path opPath = Paths.get(input.getPath());
+        Path execPath = execRoot.resolve(opRoot.relativize(opPath));
+        Files.createDirectories(execPath.getParent());
+        if (!Files.exists(execPath)) {
+          Files.copy(opPath, execPath, REPLACE_EXISTING, COPY_ATTRIBUTES);
+        }
+      }
+
       getArgsfiles(request);
 
       workerRW.write(request);
