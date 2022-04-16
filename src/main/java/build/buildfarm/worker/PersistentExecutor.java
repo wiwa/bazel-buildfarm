@@ -29,10 +29,10 @@ import com.google.rpc.Code;
 import build.bazel.remote.execution.v2.ActionResult;
 import build.buildfarm.v1test.Tree;
 import build.buildfarm.worker.resources.ResourceLimits;
+import persistent.bazel.client.PersistentWorker;
 import persistent.bazel.client.ProtoWorkerCoordinator;
 import persistent.bazel.client.ProtoWorkerCoordinator.FullResponse;
 import persistent.bazel.client.WorkerKey;
-import sun.rmi.runtime.Log;
 
 import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
@@ -109,7 +109,8 @@ public class PersistentExecutor {
     );
     String workRootDirName = "work-root_" + executionName + "_" + workRootId;
     Path workRoot = workRootsDir.resolve(workRootDirName);
-    Files.createDirectories(workRoot);
+    Path toolsRoot = workRoot.resolve(PersistentWorker.TOOL_INPUT_SUBDIR);
+    Files.createDirectories(toolsRoot);
 
     ImmutableMap<Path, Input> pathInputs = new TreeWalker(execTree).getInputs(
         operationDir.toAbsolutePath());
@@ -126,14 +127,14 @@ public class PersistentExecutor {
 
     for (Path relPath : toolInputPaths) {
       Path absPathFromOpRoot = operationDir.resolve(relPath).toAbsolutePath();
-      Path absPathFromWorkRoot = workRoot.resolve(relPath).toAbsolutePath();
-      Files.createDirectories(absPathFromWorkRoot.getParent());
-      Files.copy(absPathFromOpRoot, absPathFromWorkRoot, REPLACE_EXISTING, COPY_ATTRIBUTES);
+      Path absPathFromToolsRoot = toolsRoot.resolve(relPath).toAbsolutePath();
+      Files.createDirectories(absPathFromToolsRoot.getParent());
+      Files.copy(absPathFromOpRoot, absPathFromToolsRoot, REPLACE_EXISTING, COPY_ATTRIBUTES);
 
       HashCode toolInputHash = HashCode.fromBytes(
           pathInputs.get(absPathFromOpRoot).getDigest().toByteArray());
-      workerFileHashBuilder.put(absPathFromWorkRoot, toolInputHash);
-      hasher.putString(absPathFromWorkRoot.toString(), StandardCharsets.UTF_8);
+      workerFileHashBuilder.put(absPathFromToolsRoot, toolInputHash);
+      hasher.putString(absPathFromToolsRoot.toString(), StandardCharsets.UTF_8);
       hasher.putBytes(toolInputHash.asBytes());
     }
 
@@ -152,26 +153,28 @@ public class PersistentExecutor {
         cancellable
     );
 
-    ImmutableList.Builder<Input> workRootInputs = ImmutableList.builder();
+    // ImmutableList.Builder<Input> workRootInputs = ImmutableList.builder();
+    //
+    // for (Map.Entry<Path, Input> pathInput : pathInputs.entrySet()) {
+    //   Path opRootPath = pathInput.getKey();
+    //   Path relPath = operationDir.relativize(opRootPath);
+    //   Path workRootPath = workRoot.resolve(relPath);
+    //   Input workRootInput = pathInput.getValue().toBuilder().setPath(
+    //       workRootPath.toString()).build();
+    //
+    //   if (!toolInputPaths.contains(relPath)) {
+    //     Files.createDirectories(workRootPath.getParent());
+    //     Files.copy(opRootPath, workRootPath, REPLACE_EXISTING, COPY_ATTRIBUTES);
+    //   }
+    //
+    //   workRootInputs.add(workRootInput);
+    // }
 
-    for (Map.Entry<Path, Input> pathInput : pathInputs.entrySet()) {
-      Path opRootPath = pathInput.getKey();
-      Path relPath = operationDir.relativize(opRootPath);
-      Path workRootPath = workRoot.resolve(relPath);
-      Input workRootInput = pathInput.getValue().toBuilder().setPath(
-          workRootPath.toString()).build();
-
-      if (!toolInputPaths.contains(relPath)) {
-        Files.createDirectories(workRootPath.getParent());
-        Files.copy(opRootPath, workRootPath, REPLACE_EXISTING, COPY_ATTRIBUTES);
-      }
-
-      workRootInputs.add(workRootInput);
-    }
+    ImmutableList<Input> reqInputs = pathInputs.values().asList();
 
     WorkRequest request = WorkRequest.newBuilder()
         .addAllArguments(requestArgs)
-        .addAllInputs(workRootInputs.build())
+        .addAllInputs(reqInputs)
         .setRequestId(0)
         .build();
 
@@ -182,6 +185,31 @@ public class PersistentExecutor {
       FullResponse fullResponse = coordinator.runRequest(key, request);
       response = fullResponse.response;
       stdErr = fullResponse.errorString;
+      Path outputPath = fullResponse.outputPath;
+
+      if (response.getExitCode() == 0) {
+        // Why is paths empty when files are not?
+        logger.log(Level.FINE, "getOutputPathsList:");
+        logger.log(Level.FINE, operationContext.command.getOutputPathsList().toString());
+        logger.log(Level.FINE, "getOutputFilesList:");
+        logger.log(Level.FINE, operationContext.command.getOutputFilesList().toString());
+        logger.log(Level.FINE, "getOutputDirectoriesList:");
+        logger.log(Level.FINE, operationContext.command.getOutputDirectoriesList().toString());
+
+        for (String relOutput : operationContext.command.getOutputFilesList()) {
+          Path relPath = Paths.get(relOutput);
+          Path workPath = outputPath.resolve(relPath);
+          Path opPath = operationDir.resolve(relPath);
+          logger.log(Level.FINE, "Copying output from " + workPath + " to " + opPath);
+          Files.copy(workPath, opPath, REPLACE_EXISTING, COPY_ATTRIBUTES);
+        }
+
+        // ??? see DockerExecutor::copyOutputsOutOfContainer
+        for (String outputDir : operationContext.command.getOutputDirectoriesList()) {
+          Path outputDirPath = operationDir.resolve(outputDir);
+          outputDirPath.toFile().mkdirs();
+        }
+      }
     } catch (Exception e) {
       logger.log(Level.SEVERE, "Exception while running request: " + e.getMessage());
       e.printStackTrace();
@@ -193,38 +221,14 @@ public class PersistentExecutor {
 
     String responseOut = response.getOutput();
     logger.log(Level.FINE, "WorkResponse.output: " + responseOut);
-    resultBuilder.setStdoutRaw(ByteString.copyFromUtf8(responseOut));
 
     int exitCode = response.getExitCode();
+    resultBuilder
+        .setExitCode(exitCode)
+        .setStdoutRaw(response.getOutputBytes())
+        .setStderrRaw(ByteString.copyFrom(stdErr, StandardCharsets.UTF_8));
 
     if (exitCode == 0) {
-      // Why is paths empty when files are not?
-      logger.log(Level.FINE, "getOutputPathsList:");
-      logger.log(Level.FINE, operationContext.command.getOutputPathsList().toString());
-      logger.log(Level.FINE, "getOutputFilesList:");
-      logger.log(Level.FINE, operationContext.command.getOutputFilesList().toString());
-      logger.log(Level.FINE, "getOutputDirectoriesList:");
-      logger.log(Level.FINE, operationContext.command.getOutputDirectoriesList().toString());
-
-      for (String relOutput : operationContext.command.getOutputFilesList()) {
-        Path relPath = Paths.get(relOutput);
-        Path workPath = workRoot.resolve(relPath);
-        Path opPath = operationDir.resolve(relPath);
-        logger.log(Level.FINE, "Copying output from " + workPath + " to " + opPath);
-        Files.copy(workPath, opPath, REPLACE_EXISTING, COPY_ATTRIBUTES);
-      }
-
-      // ??? see DockerExecutor::copyOutputsOutOfContainer
-      for (String outputDir : operationContext.command.getOutputDirectoriesList()) {
-        Path outputDirPath = operationDir.resolve(outputDir);
-        outputDirPath.toFile().mkdirs();
-      }
-
-      resultBuilder
-          .setExitCode(exitCode)
-          .setStdoutRaw(response.getOutputBytes())
-          .setStderrRaw(ByteString.copyFrom(stdErr, StandardCharsets.UTF_8));
-
       return Code.OK;
     }
     logger.log(Level.SEVERE, "Wtf? " + exitCode + "\n" + responseOut);

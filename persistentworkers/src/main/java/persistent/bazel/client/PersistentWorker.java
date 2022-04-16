@@ -1,10 +1,12 @@
 package persistent.bazel.client;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -24,6 +26,9 @@ import persistent.common.KeyedWorker;
 import persistent.common.processes.ProcessWrapper;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
+import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
 public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, WorkResponse> {
 
@@ -33,8 +38,21 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
 
   private final ProtoWorkerRW workerRW;
 
+  private final Path execRoot;
+
+  public static final String TOOL_INPUT_SUBDIR = "tool_inputs";
+
   public PersistentWorker(WorkerKey key) throws IOException {
     this.key = key;
+    Path workerSetRoot = key.getExecRoot();
+    String uuid = UUID.randomUUID().toString();
+    while (Files.exists(workerSetRoot.resolve(uuid))) {
+      uuid = UUID.randomUUID().toString();
+    }
+    this.execRoot = workerSetRoot.resolve(uuid);
+
+    loadToolInputFiles();
+
     ImmutableList.Builder<String> builder = ImmutableList.builder();
     ImmutableList<String> initCmd = builder
         .addAll(key.getCmd())
@@ -45,8 +63,25 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
     logger.log(Level.FINE,
         "Starting Worker[" + key.getMnemonic() + "] with files: \n" + workerFiles);
 
-    ProcessWrapper processWrapper = new ProcessWrapper(key.getExecRoot(), initCmd, key.getEnv());
+    ProcessWrapper processWrapper = new ProcessWrapper(execRoot, initCmd, key.getEnv());
     this.workerRW = new ProtoWorkerRW(processWrapper);
+  }
+
+  private void loadToolInputFiles() throws IOException {
+    Path toolInputRoot = key.getExecRoot().resolve(TOOL_INPUT_SUBDIR);
+    for (Path toolInputAbsPath : key.getWorkerFilesWithHashes().keySet()) {
+      Path relPath = toolInputRoot.relativize(toolInputAbsPath);
+      Path execRootPath = execRoot.resolve(relPath);
+      Files.createDirectories(execRootPath.getParent());
+      if (!Files.exists(execRootPath)) {
+        Files.copy(
+            toolInputAbsPath,
+            execRootPath,
+            REPLACE_EXISTING,
+            COPY_ATTRIBUTES
+        );
+      }
+    }
   }
 
   @Override
@@ -113,6 +148,10 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
     } catch (IOException ignored) {
       return "";
     }
+  }
+
+  public Path getExecRoot() {
+    return this.execRoot;
   }
 
   public static class Supervisor extends BaseKeyedPooledObjectFactory<WorkerKey, PersistentWorker> {

@@ -1,5 +1,7 @@
 package persistent.bazel.client;
 
+import java.nio.file.Path;
+
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 
@@ -20,7 +22,7 @@ public class ProtoWorkerCoordinator {
   public FullResponse runRequest(WorkerKey workerKey, WorkRequest request) throws Exception {
     PersistentWorker worker = workerPool.borrowObject(workerKey);
     WorkResponse response = worker.doWork(request);
-    FullResponse fullResponse = new FullResponse(response, worker.flushStdErr());
+    FullResponse fullResponse = new FullResponse(response, worker.flushStdErr(), worker.getExecRoot());
     workerPool.returnObject(workerKey, worker);
     return fullResponse;
   }
@@ -28,10 +30,12 @@ public class ProtoWorkerCoordinator {
   public static class FullResponse {
     public final WorkResponse response;
     public final String errorString;
+    public final Path outputPath;
 
-    public FullResponse(WorkResponse response, String errorString) {
+    public FullResponse(WorkResponse response, String errorString, Path outputPath) {
       this.response = response;
       this.errorString = errorString;
+      this.outputPath = outputPath;
     }
   }
 }
