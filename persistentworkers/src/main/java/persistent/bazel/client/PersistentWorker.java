@@ -120,16 +120,25 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
   }
 
   @Override
-  public WorkResponse doWork(WorkRequest request) {
+  public WorkResponse doWork(WorkRequest requestWithOp) {
     WorkResponse response = null;
     try {
+
+      List<String> initReqArgs = requestWithOp.getArgumentsList();
+
+      WorkRequest request = requestWithOp
+          .toBuilder()
+          .clearArguments()
+          .addAllArguments(initReqArgs.subList(1, initReqArgs.size()))
+          .build();
+
       String reqMsg = "------<" +
           "Got request with args: " +
           request.getArgumentsList() +
           "------>";
       logger.log(Level.FINE, reqMsg);
 
-      Path opRoot = Paths.get(request.getArgumentsList().get(0));
+      Path opRoot = Paths.get(initReqArgs.get(0));
       for (Input input : request.getInputsList()) {
         Path opPath = Paths.get(input.getPath());
         Path execPath = execRoot.resolve(opRoot.relativize(opPath));
