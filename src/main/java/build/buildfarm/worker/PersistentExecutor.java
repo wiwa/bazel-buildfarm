@@ -32,6 +32,7 @@ import build.buildfarm.worker.resources.ResourceLimits;
 import persistent.bazel.client.ProtoWorkerCoordinator;
 import persistent.bazel.client.ProtoWorkerCoordinator.FullResponse;
 import persistent.bazel.client.WorkerKey;
+import sun.rmi.runtime.Log;
 
 import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
@@ -82,7 +83,7 @@ public class PersistentExecutor {
     int requestArgsIdx = jarOrBinIdx + 1;
     for (String s : argsList) {
       if (s.startsWith("-")) {
-        requestArgsIdx = Math.max(requestArgsIdx, argsList.lastIndexOf(s));
+        requestArgsIdx = Math.max(requestArgsIdx, argsList.lastIndexOf(s) + 1);
       }
     }
 
