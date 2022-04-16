@@ -104,6 +104,7 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
           try {
             String absPath = execRoot.resolve(Paths.get(arg)).toString();
             if (tools.contains(absPath)) {
+              logger.log(Level.FINE, "Absolute Path of Tool: " + absPath);
               return absPath;
             }
           } catch (Exception ignore) {
