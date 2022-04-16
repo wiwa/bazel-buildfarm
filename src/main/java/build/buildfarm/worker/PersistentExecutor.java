@@ -128,8 +128,8 @@ public class PersistentExecutor {
     for (Path relPath : toolInputPaths) {
       Path absPathFromOpRoot = operationDir.resolve(relPath).toAbsolutePath();
       Path absPathFromToolsRoot = toolsRoot.resolve(relPath).toAbsolutePath();
-      Files.createDirectories(absPathFromToolsRoot.getParent());
-      Files.copy(absPathFromOpRoot, absPathFromToolsRoot, REPLACE_EXISTING, COPY_ATTRIBUTES);
+      // Files.createDirectories(absPathFromToolsRoot.getParent());
+      // Files.copy(absPathFromOpRoot, absPathFromToolsRoot, REPLACE_EXISTING, COPY_ATTRIBUTES);
 
       HashCode toolInputHash = HashCode.fromBytes(
           pathInputs.get(absPathFromOpRoot).getDigest().toByteArray());
