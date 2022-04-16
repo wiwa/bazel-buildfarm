@@ -3,16 +3,23 @@ package persistent.bazel.client;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.HashCode;
+import com.google.devtools.build.lib.worker.WorkerProtocol;
+import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 
@@ -68,12 +75,14 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
   }
 
   private void loadToolInputFiles() throws IOException {
+    System.out.println("loadToolInputFiles()!: " + key.getExecRoot().relativize(execRoot));
     Path toolInputRoot = key.getExecRoot().resolve(TOOL_INPUT_SUBDIR);
     for (Path toolInputAbsPath : key.getWorkerFilesWithHashes().keySet()) {
       Path relPath = toolInputRoot.relativize(toolInputAbsPath);
       Path execRootPath = execRoot.resolve(relPath);
       Files.createDirectories(execRootPath.getParent());
       if (!Files.exists(execRootPath)) {
+        System.out.println("Copying tool " + toolInputAbsPath + " to " + execRootPath);
         Files.copy(
             toolInputAbsPath,
             execRootPath,
@@ -98,6 +107,8 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
           request.getArgumentsList() +
           "------>";
       logger.log(Level.FINE, reqMsg);
+
+      getArgsfiles(request);
 
       workerRW.write(request);
       logger.log(Level.FINE, "waitAndRead()");
@@ -128,6 +139,26 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
       logger.log(Level.SEVERE, "Failing with : " + e.getMessage());
     }
     return response;
+  }
+
+  private void getArgsfiles(WorkRequest request) throws IOException {
+    List<String> relArgsfiles = new ArrayList<>();
+    for (String arg : request.getArgumentsList()) {
+      if (arg.startsWith("@") && !arg.startsWith("@@")) {
+        relArgsfiles.add(arg.substring(1));
+      }
+    }
+    if (!relArgsfiles.isEmpty()) {
+      for (Input input : request.getInputsList()) {
+        String path = input.getPath();
+        for (String relFile : relArgsfiles) {
+          if (path.endsWith(relFile)) {
+            Path absArgsfile = execRoot.resolve(relFile);
+            Files.copy(Paths.get(path), absArgsfile, REPLACE_EXISTING, COPY_ATTRIBUTES);
+          }
+        }
+      }
+    }
   }
 
   @Override
