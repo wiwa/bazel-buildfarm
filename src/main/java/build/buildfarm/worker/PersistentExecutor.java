@@ -78,9 +78,21 @@ public class PersistentExecutor {
       return Code.INVALID_ARGUMENT;
     }
 
+    // flags aren't part of the request
+    int requestArgsIdx = jarOrBinIdx + 1;
+    for (String s : argsList) {
+      if (s.startsWith("-")) {
+        requestArgsIdx = Math.max(requestArgsIdx, argsList.lastIndexOf(s));
+      }
+    }
+
     ImmutableList<String> workerExecCmd = argsList.subList(0, jarOrBinIdx + 1);
-    ImmutableList<String> workerInitArgs = ImmutableList.of(PERSISTENT_WORKER_FLAG);
-    ImmutableList<String> requestArgs = argsList.subList(jarOrBinIdx + 1, argsList.size());
+    List<String> flags = argsList.subList(jarOrBinIdx + 1, requestArgsIdx);
+    ImmutableList<String> workerInitArgs = ImmutableList.<String>builder()
+        .addAll(flags)
+        .add(PERSISTENT_WORKER_FLAG)
+        .build();
+    ImmutableList<String> requestArgs = argsList.subList(requestArgsIdx, argsList.size());
 
     // Unused as of current
     boolean sandboxed = true;
