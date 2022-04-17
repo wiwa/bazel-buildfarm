@@ -15,27 +15,42 @@ public class ParsedWorkFiles {
   private static final Logger logger = Logger.getLogger(ParsedWorkFiles.class.getName());
 
   public final Path opRoot;
+  // Some tool inputs are not under opRoot
+  public final ImmutableSet<Path> absToolInputs;
   // The Paths in these collections should all be absolute and under opRoot
-  public final ImmutableSet<Path> toolInputs;
+  public final ImmutableSet<Path> opToolInputs;
   public final ImmutableMap<Path, Input> allInputs;
+
+  public final ImmutableSet<Path> allToolInputs;
 
   public ParsedWorkFiles(
       Path opRoot,
-      ImmutableSet<Path> toolInputs,
+      ImmutableSet<Path> absToolInputs,
+      ImmutableSet<Path> opToolInputs,
       ImmutableMap<Path, Input> allInputs
   ) {
     this.opRoot = opRoot;
-    this.toolInputs = toolInputs;
+    this.absToolInputs = absToolInputs;
+    this.opToolInputs = opToolInputs;
     this.allInputs = allInputs;
 
+    this.allToolInputs = ImmutableSet.<Path>builder()
+        .addAll(absToolInputs)
+        .addAll(opToolInputs)
+        .build();
+
     // Currently not a concern but could be in the future
-    for (Path tool : toolInputs) {
+    for (Path tool : opToolInputs) {
       if (!allInputs.containsKey(tool)) {
         String msg = "Tool not found in inputs: " + tool;
         logger.severe(msg);
         throw new IllegalArgumentException(msg);
       }
     }
+  }
+
+  public boolean containsTool(Path tool) {
+    return allToolInputs.contains(opRoot.resolve(tool));
   }
 
   /**
@@ -66,12 +81,26 @@ public class ParsedWorkFiles {
     ImmutableList<Path> inputAbsPaths = pathInputs.keySet().asList();
     ImmutableSet<Path> toolsAbsPaths = InputsExtractor.getToolFiles(inputAbsPaths);
 
+    ImmutableSet<Path> toolInputs = ImmutableSet.copyOf(
+        toolsAbsPaths
+        .stream()
+        .filter(p -> !p.startsWith(workFilesContext.opRoot))
+        .iterator()
+    );
+    ImmutableSet<Path> absToolInputs = ImmutableSet.copyOf(
+        toolsAbsPaths
+            .stream()
+            .filter(p -> !toolInputs.contains(p))
+            .iterator()
+    );
+
     String inputsDebugMsg = "ParsedWorkFiles:" +
         "\nallInputs: " + pathInputs.keySet() +
-        "\ntoolInputs: " + toolsAbsPaths;
+        "\ntoolInputs: " + toolInputs +
+        "\nabsToolInputs: " + absToolInputs;
 
     logger.fine(inputsDebugMsg);
 
-    return new ParsedWorkFiles(workFilesContext.opRoot, toolsAbsPaths, pathInputs);
+    return new ParsedWorkFiles(workFilesContext.opRoot, absToolInputs, toolInputs, pathInputs);
   }
 }

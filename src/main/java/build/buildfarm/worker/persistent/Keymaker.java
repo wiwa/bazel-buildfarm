@@ -1,6 +1,5 @@
 package build.buildfarm.worker.persistent;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Objects;
@@ -28,7 +27,8 @@ public class Keymaker {
     boolean sandboxed = true;
     boolean cancellable = false;
 
-    Path workRoot = calculateWorkRoot(workerInitCmd, workerInitArgs, workerEnv, executionName, sandboxed, cancellable);
+    Path workRoot = calculateWorkRoot(workerInitCmd, workerInitArgs, workerEnv, executionName,
+        sandboxed, cancellable);
     Path toolsRoot = workRoot.resolve(PersistentWorker.TOOL_INPUT_SUBDIR);
 
     SortedMap<Path, HashCode> hashedTools = workerFilesWithHashes(workerFiles);
@@ -73,7 +73,7 @@ public class Keymaker {
 
     ImmutableSortedMap.Builder<Path, HashCode> workerFileHashBuilder = ImmutableSortedMap.naturalOrder();
 
-    for (Path opPath : workerFiles.toolInputs) {
+    for (Path opPath : workerFiles.opToolInputs) {
       Path relPath = workerFiles.opRoot.relativize(opPath);
 
       HashCode toolInputHash = HashCode.fromBytes(workerFiles.digestFor(opPath).toByteArray());
@@ -84,7 +84,9 @@ public class Keymaker {
   }
 
   // Even though we hash the toolsRoot-resolved path, it doesn't exist yet.
-  static private HashCode workerFilesCombinedHash(Path toolsRoot, SortedMap<Path, HashCode> hashedTools) {
+  static private HashCode workerFilesCombinedHash(
+      Path toolsRoot, SortedMap<Path, HashCode> hashedTools
+  ) {
     Hasher hasher = Hashing.sha256().newHasher();
     hashedTools.forEach((relPath, toolHash) -> {
       hasher.putString(toolsRoot.resolve(relPath).toString(), StandardCharsets.UTF_8);
