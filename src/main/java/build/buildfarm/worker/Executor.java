@@ -477,8 +477,8 @@ class Executor {
       return PersistentExecutor.runOnPersistentWorker(
           filesContext,
           operationName,
-          arguments,
-          environment,
+          ImmutableList.copyOf(arguments),
+          ImmutableMap.copyOf(environment),
           limits,
           timeout,
           resultBuilder

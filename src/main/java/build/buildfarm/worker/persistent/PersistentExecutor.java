@@ -7,18 +7,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.SortedMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.ImmutableSortedMap;
-import com.google.common.hash.HashCode;
-import com.google.common.hash.Hasher;
-import com.google.common.hash.Hashing;
 import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
@@ -27,9 +20,7 @@ import com.google.protobuf.Duration;
 import com.google.rpc.Code;
 
 import build.bazel.remote.execution.v2.ActionResult;
-import build.buildfarm.worker.util.TreeWalker;
 import build.buildfarm.worker.resources.ResourceLimits;
-import persistent.bazel.client.PersistentWorker;
 import persistent.bazel.client.ProtoWorkerCoordinator;
 import persistent.bazel.client.ProtoWorkerCoordinator.FullResponse;
 import persistent.bazel.client.WorkerKey;
@@ -52,6 +43,9 @@ public class PersistentExecutor {
 
   static final String JAVABUILDER_JAR = "external/remote_java_tools/java_tools/JavaBuilder_deploy.jar";
 
+  private static final String SCALAC_EXEC_NAME = "Scalac";
+  private static final String JAVAC_EXEC_NAME = "JavaBuilder";
+
   /**
    * 1) Parse tool inputs and request inputs
    * 2) Makes the WorkerKey
@@ -61,8 +55,8 @@ public class PersistentExecutor {
   public static Code runOnPersistentWorker(
       WorkFilesContext context,
       String operationName,
-      List<String> arguments,
-      Map<String, String> environmentVariables,
+      ImmutableList<String> argsList,
+      ImmutableMap<String, String> envVars,
       ResourceLimits limits,
       Duration timeout,
       ActionResult.Builder resultBuilder
@@ -70,114 +64,61 @@ public class PersistentExecutor {
 
     logger.log(Level.FINE, "executeCommandOnPersistentWorker[" + operationName + "]");
 
-    Path opRoot = context.opRoot;
-
-    ImmutableList<String> argsList = ImmutableList.copyOf(arguments);
-
-    ImmutableMap<String, String> env = ImmutableMap.copyOf(environmentVariables);
-
     // Let's hardcode for easy win
-    int jarOrBinIdx = 0;
-    boolean isScalac = arguments.size() > 1 && arguments.get(0).endsWith("scalac/scalac");
-    String executionName = "Scalac";
-    if (argsList.contains(JAVABUILDER_JAR)) {
-      jarOrBinIdx = argsList.indexOf(JAVABUILDER_JAR);
-      executionName = "JavaBuilder";
-      env = ImmutableMap.of();
-    } else if (!isScalac) {
-      logger.log(Level.SEVERE, "Invalid Argument?!");
+    String executionName = getExecutionName(argsList);
+    if (executionName.isEmpty()) {
+      logger.log(Level.SEVERE, "Invalid Argument?!: " + argsList);
       return Code.INVALID_ARGUMENT;
     }
 
+    int jarOrBinIdx;
+    ImmutableMap<String, String> env;
+    if (executionName.equals(JAVAC_EXEC_NAME)) {
+      env = ImmutableMap.of();
+      jarOrBinIdx = argsList.indexOf(JAVABUILDER_JAR);
+    } else {
+      // Scalac
+      jarOrBinIdx = 0;
+      env = envVars;
+    }
+
     // flags aren't part of the request
+    // this should definitely fail on a flag with a param...
+    // Maybe hardcode to first argsfile? if only I could build bazel.
     int requestArgsIdx = jarOrBinIdx + 1;
     for (String s : argsList) {
       if (s.startsWith("-")) {
         requestArgsIdx = Math.max(requestArgsIdx, argsList.lastIndexOf(s) + 1);
       }
     }
+    List<String> flags = argsList.subList(jarOrBinIdx + 1, requestArgsIdx);
 
     ImmutableList<String> workerExecCmd = argsList.subList(0, jarOrBinIdx + 1);
-    List<String> flags = argsList.subList(jarOrBinIdx + 1, requestArgsIdx);
     ImmutableList<String> workerInitArgs = ImmutableList.<String>builder()
         .addAll(flags)
         .add(PERSISTENT_WORKER_FLAG)
         .build();
     ImmutableList<String> requestArgs = argsList.subList(requestArgsIdx, argsList.size());
 
-    // Unused as of current
-    boolean sandboxed = true;
-    boolean cancellable = false;
-
-    // Hash of a subset of the WorkerKey
-    int workRootId = Objects.hash(
-        workerExecCmd,
-        workerInitArgs,
-        env,
-        sandboxed,
-        cancellable
-    );
-    String workRootDirName = "work-root_" + executionName + "_" + workRootId;
-    Path workRoot = workRootsDir.resolve(workRootDirName);
-    Path toolsRoot = workRoot.resolve(PersistentWorker.TOOL_INPUT_SUBDIR);
-    Files.createDirectories(toolsRoot);
-
-    ImmutableMap<Path, Input> pathInputs = new TreeWalker(context.execTree).getInputs(
-        opRoot.toAbsolutePath());
-    logger.log(Level.FINE, "pathInputs: " + pathInputs.keySet());
-
-    ImmutableList<Path> absInputPaths = pathInputs.keySet().asList();
-    ImmutableSet<Path> toolInputPaths = InputsExtractor.getToolFiles(opRoot, absInputPaths);
-    logger.log(Level.FINE, "toolInputPaths=" + toolInputPaths);
+    ParsedWorkFiles workerFiles = ParsedWorkFiles.from(context);
 
     Path binary = Paths.get(workerExecCmd.get(0));
-    if (!toolInputPaths.contains(binary) && !binary.isAbsolute()) {
+    if (!workerFiles.containsTool(binary)) {
       throw new IllegalArgumentException("Binary isn't a tool?! " + binary);
     }
 
-    Hasher hasher = Hashing.sha256().newHasher();
-    ImmutableSortedMap.Builder<Path, HashCode> workerFileHashBuilder = ImmutableSortedMap.naturalOrder();
-
-    for (Path relPath : toolInputPaths) {
-      Path absPathFromOpRoot = opRoot.resolve(relPath).toAbsolutePath();
-      Path absPathFromToolsRoot = toolsRoot.resolve(relPath).toAbsolutePath();
-      Files.createDirectories(absPathFromToolsRoot.getParent());
-      if (!Files.exists(absPathFromToolsRoot)) {
-        logger.log(Level.FINE, "Toolcopy: " + absPathFromOpRoot + " to " + absPathFromToolsRoot);
-        Files.copy(absPathFromOpRoot, absPathFromToolsRoot, REPLACE_EXISTING, COPY_ATTRIBUTES);
-      }
-
-      HashCode toolInputHash = HashCode.fromBytes(
-          pathInputs.get(absPathFromOpRoot).getDigest().toByteArray());
-      workerFileHashBuilder.put(absPathFromToolsRoot, toolInputHash);
-      hasher.putString(absPathFromToolsRoot.toString(), StandardCharsets.UTF_8);
-      hasher.putBytes(toolInputHash.asBytes());
-    }
-
-    HashCode workerFilesCombinedHash = hasher.hash();
-    SortedMap<Path, HashCode> workerFilesWithHashes = workerFileHashBuilder.build();
-
-    WorkerKey key = new WorkerKey(
+    WorkerKey key = Keymaker.make(
         workerExecCmd,
         workerInitArgs,
         env,
-        workRoot,
         executionName,
-        workerFilesCombinedHash,
-        workerFilesWithHashes,
-        sandboxed,
-        cancellable
+        workerFiles
     );
 
-    ImmutableList<Input> reqInputs = pathInputs.values().asList();
-
-    ImmutableList<String> argsWithOpRoot = ImmutableList.<String>builder()
-        .add(opRoot.toString())
-        .addAll(requestArgs)
-        .build();
+    ImmutableList<Input> reqInputs = workerFiles.allInputs.values().asList();
 
     WorkRequest request = WorkRequest.newBuilder()
-        .addAllArguments(argsWithOpRoot)
+        .addAllArguments(requestArgs)
         .addAllInputs(reqInputs)
         .setRequestId(0)
         .build();
@@ -237,5 +178,15 @@ public class PersistentExecutor {
     }
     logger.log(Level.SEVERE, "Wtf? " + exitCode + "\n" + responseOut);
     return Code.FAILED_PRECONDITION;
+  }
+
+  private static String getExecutionName(ImmutableList<String> argsList) {
+    boolean isScalac = argsList.size() > 1 && argsList.get(0).endsWith("scalac/scalac");
+    if (isScalac) {
+      return SCALAC_EXEC_NAME;
+    } else if (argsList.contains(JAVABUILDER_JAR)) {
+      return JAVAC_EXEC_NAME;
+    }
+    return "";
   }
 }
