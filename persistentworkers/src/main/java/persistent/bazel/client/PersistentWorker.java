@@ -1,6 +1,7 @@
 package persistent.bazel.client;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.Set;
@@ -45,6 +46,8 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
         .addAll(key.getCmd())
         .addAll(key.getArgs())
         .build();
+
+    Files.createDirectories(execRoot);
 
     Set<Path> workerFiles = ImmutableSet.copyOf(key.getWorkerFilesWithHashes().keySet());
     logger.log(

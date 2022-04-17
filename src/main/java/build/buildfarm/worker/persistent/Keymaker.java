@@ -18,11 +18,12 @@ import persistent.bazel.client.WorkerKey;
 public class Keymaker {
 
   public static WorkerKey make(
+      Path opRoot,
       ImmutableList<String> workerInitCmd,
       ImmutableList<String> workerInitArgs,
       ImmutableMap<String, String> workerEnv,
       String executionName,
-      ParsedWorkFiles workerFiles
+      WorkerInputs workerFiles
   ) {
     boolean sandboxed = true;
     boolean cancellable = false;
@@ -43,7 +44,8 @@ public class Keymaker {
         combinedToolsHash,
         hashedTools,
         sandboxed,
-        cancellable
+        cancellable,
+        opRoot
     );
   }
 
@@ -68,7 +70,7 @@ public class Keymaker {
   }
 
   static private ImmutableSortedMap<Path, HashCode> workerFilesWithHashes(
-      ParsedWorkFiles workerFiles
+      WorkerInputs workerFiles
   ) {
 
     ImmutableSortedMap.Builder<Path, HashCode> workerFileHashBuilder = ImmutableSortedMap.naturalOrder();
