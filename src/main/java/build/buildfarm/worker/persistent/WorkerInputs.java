@@ -53,8 +53,8 @@ public class WorkerInputs {
     return allToolInputs.contains(opRoot.resolve(tool));
   }
 
-  public Path relativizeTool(Path newDir, Path tool) {
-    return newDir.resolve(opRoot.relativize(tool));
+  public Path relativizeInput(Path newRoot, Path input) {
+    return newRoot.resolve(opRoot.relativize(input));
   }
 
   /**
@@ -88,7 +88,7 @@ public class WorkerInputs {
     ImmutableSet<Path> toolInputs = ImmutableSet.copyOf(
         toolsAbsPaths
         .stream()
-        .filter(p -> !p.startsWith(workFilesContext.opRoot))
+        .filter(p -> p.startsWith(workFilesContext.opRoot))
         .iterator()
     );
     ImmutableSet<Path> absToolInputs = ImmutableSet.copyOf(
