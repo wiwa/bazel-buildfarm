@@ -16,13 +16,15 @@ public class ProtoWorkerCoordinator {
   }
 
   public static ProtoWorkerCoordinator ofCommonsPool() {
-    return new ProtoWorkerCoordinator(new CommonsWorkerPool(4));
+    return new ProtoWorkerCoordinator(
+        new CommonsWorkerPool(PersistentWorker.Supervisor.simple(), 4));
   }
 
   public FullResponse runRequest(WorkerKey workerKey, WorkRequest request) throws Exception {
     PersistentWorker worker = workerPool.borrowObject(workerKey);
     WorkResponse response = worker.doWork(request);
-    FullResponse fullResponse = new FullResponse(response, worker.flushStdErr(), worker.getExecRoot());
+    FullResponse fullResponse = new FullResponse(response, worker.flushStdErr(),
+        worker.getExecRoot());
     workerPool.returnObject(workerKey, worker);
     return fullResponse;
   }

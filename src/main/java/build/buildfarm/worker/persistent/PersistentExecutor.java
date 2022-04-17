@@ -2,11 +2,9 @@ package build.buildfarm.worker.persistent;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
-import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -21,21 +19,16 @@ import com.google.rpc.Code;
 
 import build.bazel.remote.execution.v2.ActionResult;
 import build.buildfarm.worker.resources.ResourceLimits;
-import persistent.bazel.client.ProtoWorkerCoordinator;
-import persistent.bazel.client.ProtoWorkerCoordinator.FullResponse;
 import persistent.bazel.client.WorkerKey;
-
-import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
-import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
 /**
  * Responsible for returning information just like Executor/DockerExecutor.
  */
 public class PersistentExecutor {
 
-  private static Logger logger = Logger.getLogger(PersistentExecutor.class.getName());
+  private static final Logger logger = Logger.getLogger(PersistentExecutor.class.getName());
 
-  private static final ProtoWorkerCoordinator coordinator = ProtoWorkerCoordinator.ofCommonsPool();
+  private static final ProtoCoordinator coordinator = ProtoCoordinator.ofCommonsPool(4);
 
   static final Path workRootsDir = Paths.get("/tmp/worker/persistent/");
 
@@ -127,7 +120,8 @@ public class PersistentExecutor {
     WorkResponse response;
     String stdErr = "";
     try {
-      FullResponse fullResponse = coordinator.runRequest(key, request);
+      RequestCtx requestCtx = new RequestCtx(request, context, workerFiles);
+      ResponseCtx fullResponse = coordinator.runRequest(key, requestCtx);
       response = fullResponse.response;
       stdErr = fullResponse.errorString;
     } catch (Exception e) {
