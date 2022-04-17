@@ -1,8 +1,6 @@
 package persistent.common;
 
-public interface KeyedWorker<K, I, O> {
-
-  K getKey();
+public interface Worker<I, O> {
 
   O doWork(I request);
 
