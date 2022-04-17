@@ -28,14 +28,17 @@ import org.apache.commons.pool2.PooledObject;
 import org.apache.commons.pool2.impl.DefaultPooledObject;
 
 import persistent.bazel.processes.ProtoWorkerRW;
-import persistent.common.KeyedWorker;
+import persistent.common.Worker;
 import persistent.common.processes.ProcessWrapper;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
-public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, WorkResponse> {
+/**
+ * Takes care of the underlying process's environment, i.e. directories, files
+ */
+public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
 
   private static Logger logger = Logger.getLogger(PersistentWorker.class.getName());
 
@@ -114,7 +117,6 @@ public class PersistentWorker implements KeyedWorker<WorkerKey, WorkRequest, Wor
         .collect(Collectors.toList());
   }
 
-  @Override
   public WorkerKey getKey() {
     return this.key;
   }

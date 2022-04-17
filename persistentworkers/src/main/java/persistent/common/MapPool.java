@@ -9,12 +9,9 @@ public class MapPool<K, V> implements ObjectPool<K, V> {
 
   private final Function<K, V> objFactory;
 
-  private final Function<V, K> identifier;
-
-  public MapPool(Function<K, V> factory, Function<V, K> identifier) {
+  public MapPool(Function<K, V> factory) {
     this.map = new HashMap<>();
     this.objFactory = factory;
-    this.identifier = identifier;
   }
 
   @Override
@@ -26,22 +23,7 @@ public class MapPool<K, V> implements ObjectPool<K, V> {
   }
 
   @Override
-  public K release(V obj) {
-    K key = identifier.apply(obj);
+  public void release(K key, V obj) {
     map.put(key, obj);
-    return key;
-  }
-
-  public static <K, V extends KeyedWorker<K, ?, ?>> MapPool<K, V> ofKeyedWorker(Function<K, V> factory) {
-    return new MapPool<>(
-        key -> {
-          V worker = factory.apply(key);
-          if (worker.getKey() != key) {
-            throw new RuntimeException("worker.getKey() != key: " + worker.getKey() + " != " + key);
-          }
-          return worker;
-        },
-        KeyedWorker::getKey
-    );
   }
 }

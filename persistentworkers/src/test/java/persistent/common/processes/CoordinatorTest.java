@@ -1,14 +1,17 @@
 package persistent.common.processes;
 
-import static com.google.common.truth.Truth.assertThat;
-
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-import persistent.common.KeyedWorker;
-import persistent.common.MapPool;
+import persistent.bazel.client.context.CtxAround;
+import persistent.bazel.client.context.CtxAround.Id;
 import persistent.common.Coordinator;
+import persistent.common.Coordinator.SimpleCoordinator;
+import persistent.common.MapPool;
+import persistent.common.Worker;
+
+import static com.google.common.truth.Truth.assertThat;
 
 @RunWith(JUnit4.class)
 public class CoordinatorTest {
@@ -17,25 +20,12 @@ public class CoordinatorTest {
   @Test
   public void simpleTestWorks() throws Exception {
 
-    MapPool<String, KeyedWorker<String, Integer, String>> spool = new MapPool<>(
-        key -> new KeyedWorker<String, Integer, String>() {
-          @Override
-          public String getKey() {
-            return key;
-          }
+    MapPool<String, Worker<Integer, String>> spool = new MapPool<>(key -> String::valueOf);
 
-          @Override
-          public String doWork(Integer request) {
-            return request.toString();
-          }
-        },
-        KeyedWorker::getKey
-    );
-
-    Coordinator<String, Integer, String, KeyedWorker<String, Integer, String>> pc =
+    SimpleCoordinator<String, Integer, String, Worker<Integer, String>> pc =
         Coordinator.simple(spool);
 
-    assertThat(pc.runRequest("asdf", 1))
+    assertThat(pc.runRequest("asdf", Id.of(1)))
         .isEqualTo("1");
   }
 }

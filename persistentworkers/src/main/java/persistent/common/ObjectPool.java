@@ -2,7 +2,7 @@ package persistent.common;
 
 public interface ObjectPool<K, V> {
 
-  V obtain(K key);
+  V obtain(K key) throws Exception;
 
-  K release(V obj);
+  void release(K key, V obj);
 }

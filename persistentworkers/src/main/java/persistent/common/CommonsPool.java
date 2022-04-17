@@ -9,7 +9,12 @@ import org.apache.commons.pool2.BaseKeyedPooledObjectFactory;
 import org.apache.commons.pool2.impl.GenericKeyedObjectPool;
 import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
 
-public class CommonsPool<K, V> extends GenericKeyedObjectPool<K, V> {
+/**
+ * Pool based on Apache Commons, ripped from Bazel as usual
+ * @param <K>
+ * @param <V>
+ */
+public class CommonsPool<K, V> extends CommonsObjPool<K, V> {
 
   public CommonsPool(BaseKeyedPooledObjectFactory<K, V> factory, int maxPerKey) {
     super(factory, makeConfig(maxPerKey));
@@ -21,7 +26,7 @@ public class CommonsPool<K, V> extends GenericKeyedObjectPool<K, V> {
       return super.borrowObject(key);
     } catch (Throwable t) {
       Throwables.propagateIfPossible(t, IOException.class, InterruptedException.class);
-      throw new RuntimeException("unexpected", t);
+      throw new RuntimeException("unexpected@<borrowObject>", t);
     }
   }
 
@@ -31,7 +36,7 @@ public class CommonsPool<K, V> extends GenericKeyedObjectPool<K, V> {
       super.invalidateObject(key, obj);
     } catch (Throwable t) {
       Throwables.propagateIfPossible(t, IOException.class, InterruptedException.class);
-      throw new RuntimeException("unexpected", t);
+      throw new RuntimeException("unexpected@<invalidateObject>", t);
     }
   }
 
