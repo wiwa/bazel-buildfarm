@@ -1,4 +1,4 @@
-package persistent.bazel.client.context;
+package persistent.common;
 
 public interface CtxAround<T> {
 

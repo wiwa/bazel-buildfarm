@@ -1,7 +1,6 @@
 package persistent.common;
 
-import persistent.bazel.client.context.CtxAround;
-import persistent.bazel.client.context.CtxAround.Id;
+import persistent.common.CtxAround.Id;
 
 /**
  * Manages worker lifetimes and acts as the mediator between executors and workers.
