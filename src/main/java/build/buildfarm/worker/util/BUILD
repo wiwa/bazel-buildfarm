@@ -1,16 +1,15 @@
 java_library(
-  name = "persistent",
+  name = "util",
   srcs = glob(["*.java"]),
   visibility = ["//visibility:public"],
   deps = [
-    "//persistentworkers/src/main/java/persistent/bazel:bazel-persistent-workers",
-    "//persistentworkers/src/main/java/persistent/common:persistent-common",
     "//src/main/java/build/buildfarm/common",
+    "//src/main/java/build/buildfarm/instance",
+    "//src/main/java/build/buildfarm/instance/stub",
     "//src/main/java/build/buildfarm/worker/resources",
-    "//src/main/java/build/buildfarm/worker/util",
     "//src/main/protobuf:build_buildfarm_v1test_buildfarm_java_proto",
     "//third_party/bazel/src/main/protobuf:worker_protocol_java_proto",
-    "@maven//:com_google_api_grpc_proto_google_common_protos",
+    "@maven//:com_google_code_gson_gson",
     "@maven//:com_google_guava_guava",
     "@maven//:com_google_protobuf_protobuf_java",
     "@maven//:com_google_protobuf_protobuf_java_util",
@@ -21,8 +20,5 @@ java_library(
     "@maven//:io_grpc_grpc_netty",
     "@maven//:io_grpc_grpc_protobuf",
     "@maven//:io_grpc_grpc_stub",
-    "@maven//:io_prometheus_simpleclient",
-    "@maven//:org_apache_commons_commons_compress",
-    "@maven//:org_jetbrains_annotations"
-  ]
+  ],
 )
