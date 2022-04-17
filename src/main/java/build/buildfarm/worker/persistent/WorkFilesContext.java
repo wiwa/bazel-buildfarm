@@ -34,5 +34,4 @@ public class WorkFilesContext {
     this.outputFiles = outputFiles;
     this.outputDirectories = outputDirectories;
   }
-
 }

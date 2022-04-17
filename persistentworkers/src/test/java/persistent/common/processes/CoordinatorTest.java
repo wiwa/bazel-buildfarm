@@ -4,12 +4,11 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-import persistent.bazel.client.context.CtxAround;
-import persistent.bazel.client.context.CtxAround.Id;
 import persistent.common.Coordinator;
 import persistent.common.Coordinator.SimpleCoordinator;
 import persistent.common.MapPool;
 import persistent.common.Worker;
+import persistent.common.CtxAround.Id;
 
 import static com.google.common.truth.Truth.assertThat;
 
