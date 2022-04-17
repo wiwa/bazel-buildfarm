@@ -6,5 +6,5 @@ public interface KeyedWorker<K, I, O> {
 
   O doWork(I request);
 
-  void destroy();
+  default void destroy() {}
 }

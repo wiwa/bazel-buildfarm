@@ -1,4 +1,4 @@
-package build.buildfarm.worker;
+package build.buildfarm.worker.persistent;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -27,7 +27,7 @@ import com.google.protobuf.Duration;
 import com.google.rpc.Code;
 
 import build.bazel.remote.execution.v2.ActionResult;
-import build.buildfarm.v1test.Tree;
+import build.buildfarm.worker.TreeWalker;
 import build.buildfarm.worker.resources.ResourceLimits;
 import persistent.bazel.client.PersistentWorker;
 import persistent.bazel.client.ProtoWorkerCoordinator;
@@ -37,6 +37,9 @@ import persistent.bazel.client.WorkerKey;
 import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
+/**
+ * Responsible for returning information just like Executor/DockerExecutor.
+ */
 public class PersistentExecutor {
 
   private static Logger logger = Logger.getLogger(PersistentExecutor.class.getName());
@@ -49,11 +52,15 @@ public class PersistentExecutor {
 
   static final String JAVABUILDER_JAR = "external/remote_java_tools/java_tools/JavaBuilder_deploy.jar";
 
-  static Code runOnPersistentWorker(
-      OperationContext operationContext,
+  /**
+   * 1) Parse tool inputs and request inputs
+   * 2) Makes the WorkerKey
+   * 3) Runs the work request on its Coordinator, passing it the required context
+   * 4) Ensures that results/outputs are in the right place
+   */
+  public static Code runOnPersistentWorker(
+      WorkFilesContext context,
       String operationName,
-      Tree execTree,
-      Path operationDir,
       List<String> arguments,
       Map<String, String> environmentVariables,
       ResourceLimits limits,
@@ -62,6 +69,8 @@ public class PersistentExecutor {
   ) throws IOException {
 
     logger.log(Level.FINE, "executeCommandOnPersistentWorker[" + operationName + "]");
+
+    Path opRoot = context.opRoot;
 
     ImmutableList<String> argsList = ImmutableList.copyOf(arguments);
 
@@ -112,12 +121,12 @@ public class PersistentExecutor {
     Path toolsRoot = workRoot.resolve(PersistentWorker.TOOL_INPUT_SUBDIR);
     Files.createDirectories(toolsRoot);
 
-    ImmutableMap<Path, Input> pathInputs = new TreeWalker(execTree).getInputs(
-        operationDir.toAbsolutePath());
+    ImmutableMap<Path, Input> pathInputs = new TreeWalker(context.execTree).getInputs(
+        opRoot.toAbsolutePath());
     logger.log(Level.FINE, "pathInputs: " + pathInputs.keySet());
 
     ImmutableList<Path> absInputPaths = pathInputs.keySet().asList();
-    ImmutableSet<Path> toolInputPaths = getToolFiles(operationDir, absInputPaths);
+    ImmutableSet<Path> toolInputPaths = getToolFiles(opRoot, absInputPaths);
     logger.log(Level.FINE, "toolInputPaths=" + toolInputPaths);
 
     Path binary = Paths.get(workerExecCmd.get(0));
@@ -129,7 +138,7 @@ public class PersistentExecutor {
     ImmutableSortedMap.Builder<Path, HashCode> workerFileHashBuilder = ImmutableSortedMap.naturalOrder();
 
     for (Path relPath : toolInputPaths) {
-      Path absPathFromOpRoot = operationDir.resolve(relPath).toAbsolutePath();
+      Path absPathFromOpRoot = opRoot.resolve(relPath).toAbsolutePath();
       Path absPathFromToolsRoot = toolsRoot.resolve(relPath).toAbsolutePath();
       Files.createDirectories(absPathFromToolsRoot.getParent());
       if (!Files.exists(absPathFromToolsRoot)) {
@@ -159,27 +168,10 @@ public class PersistentExecutor {
         cancellable
     );
 
-    // ImmutableList.Builder<Input> workRootInputs = ImmutableList.builder();
-    //
-    // for (Map.Entry<Path, Input> pathInput : pathInputs.entrySet()) {
-    //   Path opRootPath = pathInput.getKey();
-    //   Path relPath = operationDir.relativize(opRootPath);
-    //   Path workRootPath = workRoot.resolve(relPath);
-    //   Input workRootInput = pathInput.getValue().toBuilder().setPath(
-    //       workRootPath.toString()).build();
-    //
-    //   if (!toolInputPaths.contains(relPath)) {
-    //     Files.createDirectories(workRootPath.getParent());
-    //     Files.copy(opRootPath, workRootPath, REPLACE_EXISTING, COPY_ATTRIBUTES);
-    //   }
-    //
-    //   workRootInputs.add(workRootInput);
-    // }
-
     ImmutableList<Input> reqInputs = pathInputs.values().asList();
 
     ImmutableList<String> argsWithOpRoot = ImmutableList.<String>builder()
-        .add(operationDir.toString())
+        .add(opRoot.toString())
         .addAll(requestArgs)
         .build();
 
@@ -201,23 +193,23 @@ public class PersistentExecutor {
       if (response.getExitCode() == 0) {
         // Why is paths empty when files are not?
         logger.log(Level.FINE, "getOutputPathsList:");
-        logger.log(Level.FINE, operationContext.command.getOutputPathsList().toString());
+        logger.log(Level.FINE, context.outputPaths.toString());
         logger.log(Level.FINE, "getOutputFilesList:");
-        logger.log(Level.FINE, operationContext.command.getOutputFilesList().toString());
+        logger.log(Level.FINE, context.outputFiles.toString());
         logger.log(Level.FINE, "getOutputDirectoriesList:");
-        logger.log(Level.FINE, operationContext.command.getOutputDirectoriesList().toString());
+        logger.log(Level.FINE, context.outputDirectories.toString());
 
-        for (String relOutput : operationContext.command.getOutputFilesList()) {
+        for (String relOutput : context.outputFiles) {
           Path relPath = Paths.get(relOutput);
           Path workPath = outputPath.resolve(relPath);
-          Path opPath = operationDir.resolve(relPath);
+          Path opPath = opRoot.resolve(relPath);
           logger.log(Level.FINE, "Copying output from " + workPath + " to " + opPath);
           Files.copy(workPath, opPath, REPLACE_EXISTING, COPY_ATTRIBUTES);
         }
 
         // ??? see DockerExecutor::copyOutputsOutOfContainer
-        for (String outputDir : operationContext.command.getOutputDirectoriesList()) {
-          Path outputDirPath = operationDir.resolve(outputDir);
+        for (String outputDir : context.outputDirectories) {
+          Path outputDirPath = opRoot.resolve(outputDir);
           outputDirPath.toFile().mkdirs();
         }
       }
