@@ -26,7 +26,7 @@ public abstract class Coordinator<K, I, O, W extends Worker<I, O>, CI extends Ct
   public CO runRequest(K workerKey, CI reqWithCtx) throws Exception {
     W worker = workerPool.obtain(workerKey);
 
-    I request = preWorkInit(reqWithCtx, worker);
+    I request = preWorkInit(workerKey, reqWithCtx, worker);
     O workResponse = worker.doWork(request);
     CO responseAfterCLeanup = postWorkCleanup(workResponse, worker, reqWithCtx);
 
@@ -34,7 +34,7 @@ public abstract class Coordinator<K, I, O, W extends Worker<I, O>, CI extends Ct
     return responseAfterCLeanup;
   }
 
-  public abstract I preWorkInit(CI request, W worker) throws IOException;
+  public abstract I preWorkInit(K workerKey, CI request, W worker) throws IOException;
 
   public abstract CO postWorkCleanup(O response, W worker, CI request) throws IOException;
 
@@ -51,7 +51,7 @@ public abstract class Coordinator<K, I, O, W extends Worker<I, O>, CI extends Ct
     }
 
     @Override
-    public I preWorkInit(Id<I> request, W worker) {
+    public I preWorkInit(K workerKey, Id<I> request, W worker) {
       return request.get();
     }
 

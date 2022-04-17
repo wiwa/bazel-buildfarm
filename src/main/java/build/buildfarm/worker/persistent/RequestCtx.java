@@ -10,11 +10,12 @@ public class RequestCtx implements CtxAround<WorkRequest> {
 
   public final WorkFilesContext filesContext;
 
-  public RequestCtx(WorkRequest request, WorkFilesContext ctx) {
+  public final ParsedWorkFiles workFiles;
 
+  public RequestCtx(WorkRequest request, WorkFilesContext ctx, ParsedWorkFiles workFiles) {
     this.request = request;
-
     this.filesContext = ctx;
+    this.workFiles = workFiles;
   }
 
   @Override
