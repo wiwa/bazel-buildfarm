@@ -64,7 +64,7 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
   private static void loadToolsIntoWorkerRoot(
       WorkerKey key, Path workerExecRoot
   ) throws IOException {
-    logger.log(Level.FINE, "loadToolInputFiles() into: " + workerExecRoot);
+    logger.log(Level.FINE, "loadToolsIntoWorkerRoot() into: " + workerExecRoot);
 
     Path toolInputRoot = key.getExecRoot().resolve(TOOL_INPUT_SUBDIR);
     for (Path relPath : key.getWorkerFilesWithHashes().keySet()) {
@@ -76,13 +76,21 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
   }
 
   // For now, we assume that each operation corresponds to a unique worker
-  // Thus, we don't need to copy any files
-  // The request context will have its inputs point to the operation directory
   @Override
   public WorkRequest preWorkInit(
       WorkerKey key, RequestCtx request, PersistentWorker worker
   ) throws IOException {
+
+    copyInputs(request.workerInputs, worker.getExecRoot());
+
     return request.request;
+  }
+
+  private void copyInputs(WorkerInputs workerInputs, Path execRoot) throws IOException {
+    for (Path opPath : workerInputs.allInputs.keySet()) {
+      Path execPath = workerInputs.relativizeInput(execRoot, opPath);
+      workerInputs.accessFileFrom(opPath, execPath);
+    }
   }
 
   // After the worker has finished, we need to copy output files back to the operation directory
@@ -99,13 +107,15 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
   private void exposeOutputFiles(WorkFilesContext context, Path workerExecRoot) throws IOException {
     Path opRoot = context.opRoot;
 
+    StringBuilder sb = new StringBuilder();
     // Why is paths empty when files are not?
-    logger.log(Level.FINE, "getOutputPathsList:");
-    logger.log(Level.FINE, context.outputPaths.toString());
-    logger.log(Level.FINE, "getOutputFilesList:");
-    logger.log(Level.FINE, context.outputFiles.toString());
-    logger.log(Level.FINE, "getOutputDirectoriesList:");
-    logger.log(Level.FINE, context.outputDirectories.toString());
+    sb.append("getOutputPathsList:\n");
+    sb.append(context.outputPaths);
+    sb.append("getOutputFilesList:\n");
+    sb.append(context.outputFiles);
+    sb.append("getOutputDirectoriesList:\n");
+    sb.append(context.outputDirectories);
+    logger.fine(sb.toString());
 
     // ??? see DockerExecutor::copyOutputsOutOfContainer
     for (String outputDir : context.outputDirectories) {
@@ -113,9 +123,9 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
       Files.createDirectories(outputDirPath);
     }
 
-    for (String opOutput : context.outputFiles) {
-      Path opOutputPath = Paths.get(opOutput);
-      Path relPath = opRoot.relativize(opOutputPath);
+    for (String relOutput : context.outputFiles) {
+      Path relPath = Paths.get(relOutput);
+      Path opOutputPath = opRoot.resolve(relPath);
       Path execOutputPath = workerExecRoot.resolve(relPath);
 
       FileAccessUtils.copyFile(execOutputPath, opOutputPath);

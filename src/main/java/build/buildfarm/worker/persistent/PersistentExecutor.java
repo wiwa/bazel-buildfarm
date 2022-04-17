@@ -103,7 +103,7 @@ public class PersistentExecutor {
     WorkerInputs workerFiles = WorkerInputs.from(context);
 
     Path binary = Paths.get(workerExecCmd.get(0));
-    if (!workerFiles.containsTool(binary)) {
+    if (!workerFiles.containsTool(binary) && !binary.isAbsolute()) {
       throw new IllegalArgumentException("Binary isn't a tool?! " + binary);
     }
 
@@ -119,7 +119,7 @@ public class PersistentExecutor {
     //// Copy tool inputs as needed
     Path workToolRoot = key.getExecRoot().resolve(PersistentWorker.TOOL_INPUT_SUBDIR);
     for (Path opToolPath : workerFiles.opToolInputs) {
-      Path workToolPath = workerFiles.relativizeTool(workToolRoot, opToolPath);
+      Path workToolPath = workerFiles.relativizeInput(workToolRoot, opToolPath);
       workerFiles.accessFileFrom(opToolPath, workToolPath);
     }
 
