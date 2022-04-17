@@ -12,6 +12,7 @@ import java.util.logging.Logger;
 
 import com.google.common.collect.ImmutableList;
 import com.google.devtools.build.lib.worker.WorkerProtocol;
+import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 
 import persistent.bazel.client.PersistentWorker;
@@ -30,10 +31,9 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
   }
 
   @Override
-  public WorkerProtocol.WorkRequest preWorkInit(
+  public WorkRequest preWorkInit(
       WorkerKey key, RequestCtx request, PersistentWorker worker
   ) throws IOException {
-
     Path workerRoot = makeWorkerExecRoot(key.getExecRoot());
 
     loadToolsIntoWorkerRoot(key, request.workFiles, workerRoot);
@@ -45,7 +45,9 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
         .addAll(key.getArgs())
         .build();
 
-    return null;
+    worker.initialize(initCmd, workerRoot);
+
+    return request.request;
   }
 
   private Path makeWorkerExecRoot(Path workRoot) {

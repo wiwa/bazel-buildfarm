@@ -1,11 +1,7 @@
 package persistent.bazel.client;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -15,12 +11,10 @@ import java.util.logging.Logger;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.HashCode;
-import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.pool2.BaseKeyedPooledObjectFactory;
 import org.apache.commons.pool2.PooledObject;
 import org.apache.commons.pool2.impl.DefaultPooledObject;
 
@@ -29,8 +23,6 @@ import persistent.common.Worker;
 import persistent.common.processes.ProcessWrapper;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
-import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
 /**
  * Takes care of the underlying process's environment, i.e. directories, files
@@ -70,48 +62,20 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
   public WorkResponse doWork(WorkRequest request) {
     WorkResponse response = null;
     try {
-      String reqMsg = "------<" +
-          "Got request with args: " + request.getArgumentsList() +
-          "------>";
-      logger.log(Level.FINE, reqMsg);
+      logRequest(request);
 
       workerRW.write(request);
-
-      logger.log(Level.FINE, "waitAndRead()");
       response = workerRW.waitAndRead();
-      int returnCode = response.getExitCode();
-      if (returnCode != 0) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("Response non-zero exit_code: ");
-        sb.append(returnCode);
-        sb.append("Response output: ");
-        sb.append(response.getOutput());
-        sb.append("\n\tProcess stderr: ");
-        sb.append(workerRW.getProcessWrapper().getErrorString());
-        logger.log(Level.SEVERE, sb.toString());
 
-        // TODO might be able to remove this; scared that stdout might crash.
-        StringBuilder sb2 = new StringBuilder();
-        sb2.append("\n\tProcess stdout: ");
-        IOUtils.readLines(workerRW.getProcessWrapper().getStdOut(), UTF_8).forEach(s -> {
-          sb2.append(s);
-          sb2.append("\n\t");
-        });
-        logger.log(Level.SEVERE, sb2.toString());
-      }
+      logIfBadResponse(response);
     } catch (IOException e) {
       e.printStackTrace();
-      logger.log(Level.SEVERE, "IO Failing with : " + e.getMessage());
+      logger.severe("IO Failing with : " + e.getMessage());
     } catch (Exception e) {
       e.printStackTrace();
-      logger.log(Level.SEVERE, "Failing with : " + e.getMessage());
+      logger.severe("Failing with : " + e.getMessage());
     }
     return response;
-  }
-
-  @Override
-  public void destroy() {
-    this.workerRW.getProcessWrapper().destroy();
   }
 
   public Optional<Integer> getExitValue() {
@@ -129,15 +93,54 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
     }
   }
 
-  public Path getExecRoot() {
-    return this.execRoot;
-  }
-
   public ImmutableList<String> getInitCmd() {
     return this.initCmd;
   }
 
-  public static class Supervisor extends BaseKeyedPooledObjectFactory<WorkerKey, PersistentWorker> {
+  public Path getExecRoot() {
+    return this.execRoot;
+  }
+
+  private void logRequest(WorkRequest request) {
+    logger.log(
+        Level.FINE,
+        "doWork()------<" +
+            "Got request with args: " + request.getArgumentsList() +
+            "------>"
+    );
+  }
+
+  private void logIfBadResponse(WorkResponse response) throws IOException {
+    int returnCode = response.getExitCode();
+    if (returnCode != 0) {
+      StringBuilder sb = new StringBuilder();
+      sb.append("logBadResponse()");
+      sb.append("\nResponse non-zero exit_code: ");
+      sb.append(returnCode);
+      sb.append("Response output: ");
+      sb.append(response.getOutput());
+      sb.append("\n\tProcess stderr: ");
+      sb.append(workerRW.getProcessWrapper().getErrorString());
+      logger.log(Level.SEVERE, sb.toString());
+
+      // TODO might be able to remove this; scared that stdout might crash.
+      StringBuilder sb2 = new StringBuilder();
+      sb2.append("logBadResponse()");
+      sb2.append("\n\tProcess stdout: ");
+      IOUtils.readLines(workerRW.getProcessWrapper().getStdOut(), UTF_8).forEach(s -> {
+        sb2.append(s);
+        sb2.append("\n\t");
+      });
+      logger.log(Level.SEVERE, sb2.toString());
+    }
+  }
+
+  @Override
+  public void destroy() {
+    this.workerRW.getProcessWrapper().destroy();
+  }
+
+  public static class Supervisor extends persistent.common.Supervisor<WorkerKey, PersistentWorker> {
 
     private static Supervisor singleton = null;
 
@@ -156,23 +159,6 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
     @Override
     public PooledObject<PersistentWorker> wrap(PersistentWorker persistentWorker) {
       return new DefaultPooledObject<>(persistentWorker);
-    }
-
-
-    /**
-     * When a worker process is discarded, destroy its process, too.
-     */
-    @Override
-    public void destroyObject(WorkerKey key, PooledObject<PersistentWorker> p) {
-      StringBuilder msgBuilder = new StringBuilder();
-      msgBuilder.append("Destroying worker from WorkerKey: ");
-      msgBuilder.append(key);
-      for (StackTraceElement e : Thread.currentThread().getStackTrace()) {
-        msgBuilder.append("\n\t");
-        msgBuilder.append(e);
-      }
-      logger.log(Level.SEVERE, msgBuilder.toString());
-      p.getObject().destroy();
     }
 
     @Override
