@@ -166,6 +166,7 @@ public final class WorkerKey {
         cmd,
         args,
         env,
+        execRoot,
         mnemonic,
         cancellable,
         sandboxed

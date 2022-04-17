@@ -46,7 +46,7 @@ public class PersistentExecutor {
 
   private static final ProtoWorkerCoordinator coordinator = ProtoWorkerCoordinator.ofCommonsPool();
 
-  private static final Path workRootsDir = Paths.get("/tmp/worker/persistent/");
+  static final Path workRootsDir = Paths.get("/tmp/worker/persistent/");
 
   static final String PERSISTENT_WORKER_FLAG = "--persistent_worker";
 
@@ -76,6 +76,7 @@ public class PersistentExecutor {
 
     ImmutableMap<String, String> env = ImmutableMap.copyOf(environmentVariables);
 
+    // Let's hardcode for easy win
     int jarOrBinIdx = 0;
     boolean isScalac = arguments.size() > 1 && arguments.get(0).endsWith("scalac/scalac");
     String executionName = "Scalac";
@@ -126,7 +127,7 @@ public class PersistentExecutor {
     logger.log(Level.FINE, "pathInputs: " + pathInputs.keySet());
 
     ImmutableList<Path> absInputPaths = pathInputs.keySet().asList();
-    ImmutableSet<Path> toolInputPaths = getToolFiles(opRoot, absInputPaths);
+    ImmutableSet<Path> toolInputPaths = InputsExtractor.getToolFiles(opRoot, absInputPaths);
     logger.log(Level.FINE, "toolInputPaths=" + toolInputPaths);
 
     Path binary = Paths.get(workerExecCmd.get(0));
@@ -236,26 +237,5 @@ public class PersistentExecutor {
     }
     logger.log(Level.SEVERE, "Wtf? " + exitCode + "\n" + responseOut);
     return Code.FAILED_PRECONDITION;
-  }
-
-  // Returns file paths under opRoot after relativizing them via opRoot
-  static ImmutableSet<Path> getToolFiles(Path opRoot, List<Path> files) {
-    return ImmutableSet.copyOf(
-        files
-            .stream()
-            .filter(path -> {
-              String pathStr = path.toString();
-              return pathStr.contains("external/remotejdk11_linux/") ||
-                  pathStr.contains("external/remote_java_tools/") ||
-                  pathStr.endsWith("/external/bazel_tools/tools/jdk/platformclasspath.jar") ||
-                  pathStr.endsWith("/scalac.jar") ||
-                  pathStr.endsWith("_deploy.jar") ||
-                  pathStr.endsWith("scalac/scalac") ||
-                  pathStr.contains(
-                      "external/io_bazel_rules_scala/src/java/io/bazel/rulesscala/scalac/scalac.runfiles");
-            })
-            .map(opRoot::relativize)
-            .iterator()
-    );
   }
 }
