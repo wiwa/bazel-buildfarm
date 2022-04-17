@@ -8,10 +8,10 @@ import org.junit.runners.JUnit4;
 
 import persistent.common.KeyedWorker;
 import persistent.common.MapPool;
-import persistent.common.PersistentCoordinator;
+import persistent.common.Coordinator;
 
 @RunWith(JUnit4.class)
-public class PersistentCoordinatorTest {
+public class CoordinatorTest {
 
   @SuppressWarnings("CheckReturnValue")
   @Test
@@ -32,7 +32,8 @@ public class PersistentCoordinatorTest {
         KeyedWorker::getKey
     );
 
-    PersistentCoordinator<String, Integer, String> pc = new PersistentCoordinator<>(spool);
+    Coordinator<String, Integer, String, KeyedWorker<String, Integer, String>> pc =
+        Coordinator.simple(spool);
 
     assertThat(pc.runRequest("asdf", 1))
         .isEqualTo("1");
