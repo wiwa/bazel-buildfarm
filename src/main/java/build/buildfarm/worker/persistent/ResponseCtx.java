@@ -12,12 +12,9 @@ public class ResponseCtx implements CtxAround<WorkResponse> {
 
   public final String errorString;
 
-  public final Path outputPath;
-
-  public ResponseCtx(WorkResponse response, String errorString, Path outputPath) {
+  public ResponseCtx(WorkResponse response, String errorString) {
     this.response = response;
     this.errorString = errorString;
-    this.outputPath = outputPath;
   }
 
   @Override

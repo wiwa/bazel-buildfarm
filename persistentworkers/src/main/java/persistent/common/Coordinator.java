@@ -1,5 +1,7 @@
 package persistent.common;
 
+import java.io.IOException;
+
 import persistent.common.CtxAround.Id;
 
 /**
@@ -32,9 +34,9 @@ public abstract class Coordinator<K, I, O, W extends Worker<I, O>, CI extends Ct
     return responseAfterCLeanup;
   }
 
-  public abstract I preWorkInit(CI request, W worker);
+  public abstract I preWorkInit(CI request, W worker) throws IOException;
 
-  public abstract CO postWorkCleanup(O response, W worker, CI request);
+  public abstract CO postWorkCleanup(O response, W worker, CI request) throws IOException;
 
   public static <K, I, O, W extends Worker<I, O>> SimpleCoordinator<K, I, O, W> simple(
       ObjectPool<K, W> workerPool
