@@ -445,10 +445,7 @@ class Executor {
       environment.put(environmentVariable.getName(), environmentVariable.getValue());
     }
 
-    for (Map.Entry<String, String> environmentVariable :
-        limits.extraEnvironmentVariables.entrySet()) {
-      environment.put(environmentVariable.getKey(), environmentVariable.getValue());
-    }
+    environment.putAll(limits.extraEnvironmentVariables);
 
     // allow debugging before an execution
     if (limits.debugBeforeExecution) {

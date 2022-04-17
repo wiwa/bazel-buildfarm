@@ -6,6 +6,9 @@ import com.google.common.collect.ImmutableList;
 
 import build.buildfarm.v1test.Tree;
 
+/**
+ * POJO/data class grouping all the input/output file requirements for persistent workers
+ */
 public class WorkFilesContext {
 
   public final Path opRoot;
