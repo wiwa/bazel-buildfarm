@@ -4,7 +4,6 @@ import java.nio.file.Path;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.devtools.build.lib.worker.WorkerProtocol;
 import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
 
 import build.buildfarm.v1test.Tree;

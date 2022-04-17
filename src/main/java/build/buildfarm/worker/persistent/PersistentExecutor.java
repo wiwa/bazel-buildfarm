@@ -130,31 +130,6 @@ public class PersistentExecutor {
       FullResponse fullResponse = coordinator.runRequest(key, request);
       response = fullResponse.response;
       stdErr = fullResponse.errorString;
-      Path outputPath = fullResponse.outputPath;
-
-      if (response.getExitCode() == 0) {
-        // Why is paths empty when files are not?
-        logger.log(Level.FINE, "getOutputPathsList:");
-        logger.log(Level.FINE, context.outputPaths.toString());
-        logger.log(Level.FINE, "getOutputFilesList:");
-        logger.log(Level.FINE, context.outputFiles.toString());
-        logger.log(Level.FINE, "getOutputDirectoriesList:");
-        logger.log(Level.FINE, context.outputDirectories.toString());
-
-        for (String relOutput : context.outputFiles) {
-          Path relPath = Paths.get(relOutput);
-          Path workPath = outputPath.resolve(relPath);
-          Path opPath = opRoot.resolve(relPath);
-          logger.log(Level.FINE, "Copying output from " + workPath + " to " + opPath);
-          Files.copy(workPath, opPath, REPLACE_EXISTING, COPY_ATTRIBUTES);
-        }
-
-        // ??? see DockerExecutor::copyOutputsOutOfContainer
-        for (String outputDir : context.outputDirectories) {
-          Path outputDirPath = opRoot.resolve(outputDir);
-          outputDirPath.toFile().mkdirs();
-        }
-      }
     } catch (Exception e) {
       logger.log(Level.SEVERE, "Exception while running request: " + e.getMessage());
       e.printStackTrace();
