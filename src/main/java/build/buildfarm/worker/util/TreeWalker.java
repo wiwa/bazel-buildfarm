@@ -1,4 +1,4 @@
-package build.buildfarm.worker;
+package build.buildfarm.worker.util;
 
 import java.nio.file.Path;
 import java.util.Map;

@@ -27,7 +27,7 @@ import com.google.protobuf.Duration;
 import com.google.rpc.Code;
 
 import build.bazel.remote.execution.v2.ActionResult;
-import build.buildfarm.worker.TreeWalker;
+import build.buildfarm.worker.util.TreeWalker;
 import build.buildfarm.worker.resources.ResourceLimits;
 import persistent.bazel.client.PersistentWorker;
 import persistent.bazel.client.ProtoWorkerCoordinator;
