@@ -5,15 +5,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
@@ -40,119 +37,46 @@ import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
  */
 public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
 
-  private static Logger logger = Logger.getLogger(PersistentWorker.class.getName());
-
-  private final WorkerKey key;
-
-  private final ProtoWorkerRW workerRW;
-
-  private final Path execRoot;
+  private static final Logger logger = Logger.getLogger(PersistentWorker.class.getName());
 
   public static final String TOOL_INPUT_SUBDIR = "tool_inputs";
 
-  public PersistentWorker(WorkerKey key) throws IOException {
+  private final WorkerKey key;
+  private ProtoWorkerRW workerRW;
+  private ImmutableList<String> initCmd;
+  private Path execRoot;
+
+  public PersistentWorker(WorkerKey key) {
     this.key = key;
-    Path workerSetRoot = key.getExecRoot();
-    String uuid = UUID.randomUUID().toString();
-    while (Files.exists(workerSetRoot.resolve(uuid))) {
-      uuid = UUID.randomUUID().toString();
-    }
-    this.execRoot = workerSetRoot.resolve(uuid);
+  }
 
-    Set<String> tools = loadToolInputFiles();
-
-    ImmutableList.Builder<String> builder = ImmutableList.builder();
-
-    ImmutableList<String> cmd = ImmutableList.copyOf(absPathTools(key.getCmd(), tools));
-
-    ImmutableList<String> initCmd = builder
-        .addAll(cmd)
-        .addAll(key.getArgs())
-        .build();
+  public void initialize(ImmutableList<String> initCmd, Path execRoot) throws IOException {
+    this.execRoot = execRoot;
+    this.initCmd = initCmd;
 
     Set<Path> workerFiles = ImmutableSet.copyOf(key.getWorkerFilesWithHashes().keySet());
-    logger.log(Level.FINE,
-        "Starting Worker[" + key.getMnemonic() + "](" + cmd + ") with files: \n" + workerFiles);
+    logger.log(
+        Level.FINE,
+        "Starting Worker[" + key.getMnemonic() + "]<" + execRoot + ">("
+            + initCmd + ") with files: \n"
+            + workerFiles
+    );
 
     ProcessWrapper processWrapper = new ProcessWrapper(execRoot, initCmd, key.getEnv());
     this.workerRW = new ProtoWorkerRW(processWrapper);
   }
 
-  private Set<String> loadToolInputFiles() throws IOException {
-    logger.log(Level.FINE, "loadToolInputFiles()!: " + key.getExecRoot().relativize(execRoot));
-    Set<String> relToolPaths = new HashSet<>();
-    Path toolInputRoot = key.getExecRoot().resolve(TOOL_INPUT_SUBDIR);
-    for (Path toolInputAbsPath : key.getWorkerFilesWithHashes().keySet()) {
-      Path relPath = toolInputRoot.relativize(toolInputAbsPath);
-      relToolPaths.add(relPath.toString());
-      Path execRootPath = execRoot.resolve(relPath);
-      Files.createDirectories(execRootPath.getParent());
-      if (!Files.exists(execRootPath)) {
-        logger.log(Level.FINE, "Copying tool " + toolInputAbsPath + " to " + execRootPath);
-        Files.copy(
-            toolInputAbsPath,
-            execRootPath,
-            REPLACE_EXISTING,
-            COPY_ATTRIBUTES
-        );
-      }
-    }
-    return relToolPaths;
-  }
-
-  private List<String> absPathTools(List<String> cmd, Set<String> tools) {
-    return cmd
-        .stream()
-        .map(arg -> {
-          try {
-            String absPath = execRoot.resolve(Paths.get(arg)).toString();
-            if (tools.contains(absPath)) {
-              logger.log(Level.FINE, "Absolute Path of Tool: " + absPath);
-              return absPath;
-            }
-          } catch (Exception ignore) {
-          }
-          return arg;
-        })
-        .collect(Collectors.toList());
-  }
-
-  public WorkerKey getKey() {
-    return this.key;
-  }
-
   @Override
-  public WorkResponse doWork(WorkRequest requestWithOp) {
+  public WorkResponse doWork(WorkRequest request) {
     WorkResponse response = null;
     try {
-
-      List<String> initReqArgs = requestWithOp.getArgumentsList();
-
-      WorkRequest request = requestWithOp
-          .toBuilder()
-          .clearArguments()
-          .addAllArguments(initReqArgs.subList(1, initReqArgs.size()))
-          .build();
-
       String reqMsg = "------<" +
-          "Got request with args: " +
-          request.getArgumentsList() +
+          "Got request with args: " + request.getArgumentsList() +
           "------>";
       logger.log(Level.FINE, reqMsg);
 
-      Path opRoot = Paths.get(initReqArgs.get(0));
-      for (Input input : request.getInputsList()) {
-        Path opPath = Paths.get(input.getPath());
-        Path execPath = execRoot.resolve(opRoot.relativize(opPath));
-        Files.createDirectories(execPath.getParent());
-        if (!Files.exists(execPath)) {
-          Files.copy(opPath, execPath, REPLACE_EXISTING, COPY_ATTRIBUTES);
-        }
-      }
-
-      getArgsfiles(request);
-
       workerRW.write(request);
+
       logger.log(Level.FINE, "waitAndRead()");
       response = workerRW.waitAndRead();
       int returnCode = response.getExitCode();
@@ -185,33 +109,6 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
     return response;
   }
 
-  private void getArgsfiles(WorkRequest request) throws IOException {
-    List<String> relArgsfiles = new ArrayList<>();
-    for (String arg : request.getArgumentsList()) {
-      if (arg.startsWith("@") && !arg.startsWith("@@")) {
-        relArgsfiles.add(arg.substring(1));
-      }
-    }
-    if (!relArgsfiles.isEmpty()) {
-      for (String relFile : relArgsfiles) {
-        boolean copied = false;
-        for (Input input : request.getInputsList()) {
-          String inputPath = input.getPath();
-          if (inputPath.endsWith(relFile)) {
-            Path absArgsfile = execRoot.resolve(relFile);
-            Files.createDirectories(absArgsfile.getParent());
-            Files.copy(Paths.get(inputPath), absArgsfile, REPLACE_EXISTING, COPY_ATTRIBUTES);
-            copied = true;
-            break;
-          }
-        }
-        if (!copied) {
-          throw new IOException("Did not copy argfile: " + relFile);
-        }
-      }
-    }
-  }
-
   @Override
   public void destroy() {
     this.workerRW.getProcessWrapper().destroy();
@@ -234,6 +131,10 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
 
   public Path getExecRoot() {
     return this.execRoot;
+  }
+
+  public ImmutableList<String> getInitCmd() {
+    return this.initCmd;
   }
 
   public static class Supervisor extends BaseKeyedPooledObjectFactory<WorkerKey, PersistentWorker> {
