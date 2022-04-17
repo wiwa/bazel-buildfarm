@@ -2,6 +2,7 @@ package persistent.bazel.processes;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import com.google.common.collect.ImmutableList;
 import com.google.devtools.build.lib.worker.WorkerProtocol;
@@ -43,7 +44,7 @@ public class PersistentWorkerTest {
     WorkerKey key = WorkerUtils.emptyWorkerKey(workDir, initArgs);
 
     Path stdErrLog = workDir.resolve("test-err.log");
-    PersistentWorker worker = new PersistentWorker(key);
+    PersistentWorker worker = new PersistentWorker(key, "worker-dir");
 
     ImmutableList<String> arguments = ImmutableList.of("2", "4");
     String expectedOutput = "6";

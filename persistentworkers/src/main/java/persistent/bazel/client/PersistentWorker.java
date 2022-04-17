@@ -34,17 +34,17 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
   public static final String TOOL_INPUT_SUBDIR = "tool_inputs";
 
   private final WorkerKey key;
-  private ProtoWorkerRW workerRW;
-  private ImmutableList<String> initCmd;
-  private Path execRoot;
+  private final ImmutableList<String> initCmd;
+  private final Path execRoot;
+  private final ProtoWorkerRW workerRW;
 
-  public PersistentWorker(WorkerKey key) {
+  public PersistentWorker(WorkerKey key, String workerDir) throws IOException {
     this.key = key;
-  }
-
-  public void initialize(ImmutableList<String> initCmd, Path execRoot) throws IOException {
-    this.execRoot = execRoot;
-    this.initCmd = initCmd;
+    this.execRoot = key.getExecRoot().resolve(workerDir);
+    this.initCmd = ImmutableList.<String>builder()
+        .addAll(key.getCmd())
+        .addAll(key.getArgs())
+        .build();
 
     Set<Path> workerFiles = ImmutableSet.copyOf(key.getWorkerFilesWithHashes().keySet());
     logger.log(
@@ -140,21 +140,18 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
     this.workerRW.getProcessWrapper().destroy();
   }
 
-  public static class Supervisor extends persistent.common.Supervisor<WorkerKey, PersistentWorker> {
+  public static abstract class Supervisor extends persistent.common.Supervisor<WorkerKey, PersistentWorker> {
 
-    private static Supervisor singleton = null;
-
-    public static synchronized Supervisor get() {
-      if (singleton == null) {
-        singleton = new Supervisor();
-      }
-      return singleton;
+    public static Supervisor simple() {
+      return new Supervisor() {
+        @Override
+        public PersistentWorker create(WorkerKey workerKey) throws Exception {
+          return new PersistentWorker(workerKey, "");
+        }
+      };
     }
 
-    @Override
-    public PersistentWorker create(WorkerKey workerKey) throws Exception {
-      return new PersistentWorker(workerKey);
-    }
+    public abstract PersistentWorker create(WorkerKey workerKey) throws Exception;
 
     @Override
     public PooledObject<PersistentWorker> wrap(PersistentWorker persistentWorker) {
