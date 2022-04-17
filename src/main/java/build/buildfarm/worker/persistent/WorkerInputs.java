@@ -10,9 +10,9 @@ import com.google.common.collect.ImmutableSet;
 import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
 import com.google.protobuf.ByteString;
 
-public class ParsedWorkFiles {
+public class WorkerInputs {
 
-  private static final Logger logger = Logger.getLogger(ParsedWorkFiles.class.getName());
+  private static final Logger logger = Logger.getLogger(WorkerInputs.class.getName());
 
   public final Path opRoot;
   // Some tool inputs are not under opRoot
@@ -23,7 +23,7 @@ public class ParsedWorkFiles {
 
   public final ImmutableSet<Path> allToolInputs;
 
-  public ParsedWorkFiles(
+  public WorkerInputs(
       Path opRoot,
       ImmutableSet<Path> absToolInputs,
       ImmutableSet<Path> opToolInputs,
@@ -53,6 +53,10 @@ public class ParsedWorkFiles {
     return allToolInputs.contains(opRoot.resolve(tool));
   }
 
+  public Path relativizeTool(Path newDir, Path tool) {
+    return newDir.resolve(opRoot.relativize(tool));
+  }
+
   /**
    * After this method is called, 'fileToAccess' will be accessible via 'accessFrom'
    *
@@ -75,7 +79,7 @@ public class ParsedWorkFiles {
     return input.getDigest();
   }
 
-  public static ParsedWorkFiles from(WorkFilesContext workFilesContext) {
+  public static WorkerInputs from(WorkFilesContext workFilesContext) {
     ImmutableMap<Path, Input> pathInputs = workFilesContext.getPathInputs();
 
     ImmutableList<Path> inputAbsPaths = pathInputs.keySet().asList();
@@ -101,6 +105,6 @@ public class ParsedWorkFiles {
 
     logger.fine(inputsDebugMsg);
 
-    return new ParsedWorkFiles(workFilesContext.opRoot, absToolInputs, toolInputs, pathInputs);
+    return new WorkerInputs(workFilesContext.opRoot, absToolInputs, toolInputs, pathInputs);
   }
 }

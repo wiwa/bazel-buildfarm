@@ -48,6 +48,9 @@ public final class WorkerKey {
    */
   private final int hash;
 
+  // Operation execRoot which created this WorkerKey
+  public final Path opRoot;
+
   public WorkerKey(
       ImmutableList<String> cmd,
       ImmutableList<String> args,
@@ -57,7 +60,8 @@ public final class WorkerKey {
       HashCode workerFilesCombinedHash,
       SortedMap<Path, HashCode> workerFilesWithHashes,
       boolean sandboxed,
-      boolean cancellable
+      boolean cancellable,
+      Path opRoot
   ) {
     // Part of hash
     this.cmd = Preconditions.checkNotNull(cmd);
@@ -72,6 +76,8 @@ public final class WorkerKey {
     this.workerFilesWithHashes = Preconditions.checkNotNull(workerFilesWithHashes);
 
     this.hash = calculateHashCode();
+
+    this.opRoot = opRoot;
   }
 
   /** Getter function for variable cmd. */

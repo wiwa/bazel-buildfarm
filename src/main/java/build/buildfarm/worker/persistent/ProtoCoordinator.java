@@ -18,6 +18,12 @@ import persistent.bazel.client.WorkerKey;
 
 import static persistent.bazel.client.PersistentWorker.TOOL_INPUT_SUBDIR;
 
+/**
+ * Responsible for:
+ * 1) Initializing a new Worker's file environment correctly
+ * 2) pre-request requirements
+ * 3) post-response requirements, i.e. putting output files in the right place
+ */
 public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
 
   private static final Logger logger = Logger.getLogger(ProtoCoordinator.class.getName());
@@ -30,6 +36,10 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
     super(new CommonsWorkerPool(supervisor, maxWorkersPerKey));
   }
 
+  // We copy tool inputs from the shared WorkerKey tools directory into our worker exec root,
+  //    since there are multiple workers per key,
+  //    and presumably there might be writes to tool inputs?
+  // Tool inputs which are absolute-paths (e.g. /usr/bin/...) are not affected
   public static ProtoCoordinator ofCommonsPool(int maxWorkersPerKey) {
     PersistentWorker.Supervisor loadToolsOnCreate = new PersistentWorker.Supervisor() {
       @Override
@@ -54,7 +64,7 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
   private static void loadToolsIntoWorkerRoot(
       WorkerKey key, Path workerExecRoot
   ) throws IOException {
-    logger.log(Level.FINE, "loadToolInputFiles()!: " + workerExecRoot);
+    logger.log(Level.FINE, "loadToolInputFiles() into: " + workerExecRoot);
 
     Path toolInputRoot = key.getExecRoot().resolve(TOOL_INPUT_SUBDIR);
     for (Path relPath : key.getWorkerFilesWithHashes().keySet()) {
@@ -65,6 +75,9 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
     }
   }
 
+  // For now, we assume that each operation corresponds to a unique worker
+  // Thus, we don't need to copy any files
+  // The request context will have its inputs point to the operation directory
   @Override
   public WorkRequest preWorkInit(
       WorkerKey key, RequestCtx request, PersistentWorker worker
@@ -72,6 +85,7 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
     return request.request;
   }
 
+  // After the worker has finished, we need to copy output files back to the operation directory
   @Override
   public ResponseCtx postWorkCleanup(
       WorkResponse response, PersistentWorker worker, RequestCtx request

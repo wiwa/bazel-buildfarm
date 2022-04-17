@@ -19,6 +19,7 @@ import com.google.rpc.Code;
 
 import build.bazel.remote.execution.v2.ActionResult;
 import build.buildfarm.worker.resources.ResourceLimits;
+import persistent.bazel.client.PersistentWorker;
 import persistent.bazel.client.WorkerKey;
 
 /**
@@ -42,8 +43,9 @@ public class PersistentExecutor {
   /**
    * 1) Parse tool inputs and request inputs
    * 2) Makes the WorkerKey
-   * 3) Runs the work request on its Coordinator, passing it the required context
-   * 4) Ensures that results/outputs are in the right place
+   * 3) Loads the tool inputs if needed into the WorkerKey tool inputs dir
+   * 4) Runs the work request on its Coordinator, passing it the required context
+   * 5) Passes output to the resultBuilder
    */
   public static Code runOnPersistentWorker(
       WorkFilesContext context,
@@ -55,9 +57,10 @@ public class PersistentExecutor {
       ActionResult.Builder resultBuilder
   ) throws IOException {
 
+    //// Start, hardcoding persistent worker actions
+
     logger.log(Level.FINE, "executeCommandOnPersistentWorker[" + operationName + "]");
 
-    // Let's hardcode for easy win
     String executionName = getExecutionName(argsList);
     if (executionName.isEmpty()) {
       logger.log(Level.SEVERE, "Invalid Argument?!: " + argsList);
@@ -74,6 +77,8 @@ public class PersistentExecutor {
       jarOrBinIdx = 0;
       env = envVars;
     }
+
+    //// Parse args into initial tool startup and action request
 
     // flags aren't part of the request
     // this should definitely fail on a flag with a param...
@@ -93,7 +98,9 @@ public class PersistentExecutor {
         .build();
     ImmutableList<String> requestArgs = argsList.subList(requestArgsIdx, argsList.size());
 
-    ParsedWorkFiles workerFiles = ParsedWorkFiles.from(context);
+    //// Make Key
+
+    WorkerInputs workerFiles = WorkerInputs.from(context);
 
     Path binary = Paths.get(workerExecCmd.get(0));
     if (!workerFiles.containsTool(binary)) {
@@ -101,12 +108,23 @@ public class PersistentExecutor {
     }
 
     WorkerKey key = Keymaker.make(
+        context.opRoot,
         workerExecCmd,
         workerInitArgs,
         env,
         executionName,
         workerFiles
     );
+
+    //// Copy tool inputs as needed
+    Path workToolRoot = key.getExecRoot().resolve(PersistentWorker.TOOL_INPUT_SUBDIR);
+    for (Path opToolPath : workerFiles.opToolInputs) {
+      Path workToolPath = workerFiles.relativizeTool(workToolRoot, opToolPath);
+      workerFiles.accessFileFrom(opToolPath, workToolPath);
+    }
+
+
+    //// Make request
 
     ImmutableList<Input> reqInputs = workerFiles.allInputs.values().asList();
 
@@ -116,12 +134,17 @@ public class PersistentExecutor {
         .setRequestId(0)
         .build();
 
+    RequestCtx requestCtx = new RequestCtx(request, context, workerFiles);
+
+    //// Run request
+    //// Required file operations (in/out) are the responsibility of the coordinator
+
     logger.log(Level.FINE, "Request with key: " + key);
     WorkResponse response;
     String stdErr = "";
     try {
-      RequestCtx requestCtx = new RequestCtx(request, context, workerFiles);
       ResponseCtx fullResponse = coordinator.runRequest(key, requestCtx);
+
       response = fullResponse.response;
       stdErr = fullResponse.errorString;
     } catch (Exception e) {
@@ -132,6 +155,8 @@ public class PersistentExecutor {
           .setExitCode(1)
           .build();
     }
+
+    //// Set results
 
     String responseOut = response.getOutput();
     logger.log(Level.FINE, "WorkResponse.output: " + responseOut);
