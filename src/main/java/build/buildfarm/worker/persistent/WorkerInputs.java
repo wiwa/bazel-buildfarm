@@ -73,9 +73,9 @@ public class WorkerInputs {
    * @param accessFrom   absolute path
    */
   public void accessFileFrom(Path fileToAccess, Path accessFrom) throws IOException {
-    if (!allInputs.containsKey(fileToAccess)) {
+    if (!allInputs.containsKey(fileToAccess) && !missingArgsfiles.contains(fileToAccess)) {
       throw new IllegalArgumentException(
-          "accessFileFrom() called on non-input file: " + fileToAccess);
+          "accessFileFrom() called on non-input non-argsfile file: " + fileToAccess);
     }
     FileAccessUtils.copyFile(fileToAccess, accessFrom);
   }
