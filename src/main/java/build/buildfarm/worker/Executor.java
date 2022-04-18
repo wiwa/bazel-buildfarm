@@ -426,15 +426,17 @@ class Executor {
   )
       throws IOException, InterruptedException {
 
-    System.out.println("======<");
-    System.out.println("Calling executeCommand with:");
-    System.out.println("operationName=" + operationName);
-    System.out.println("execDir=" + execDir.toAbsolutePath());
-    System.out.println("arguments=" + ImmutableList.copyOf(arguments));
-    System.out.println("environmentVariables=" + ImmutableList.copyOf(environmentVariables));
-    System.out.println("limits.unusedProperties=" + ImmutableMap.copyOf(limits.unusedProperties));
-    System.out.println("timeout=" + timeout);
-    System.out.println("======>");
+    StringBuilder sb = new StringBuilder();
+    sb.append("======<");
+    sb.append("Calling executeCommand with:");
+    sb.append("operationName=" + operationName);
+    sb.append("execDir=" + execDir.toAbsolutePath());
+    sb.append("arguments=" + ImmutableList.copyOf(arguments));
+    sb.append("environmentVariables=" + ImmutableList.copyOf(environmentVariables));
+    sb.append("limits.unusedProperties=" + ImmutableMap.copyOf(limits.unusedProperties));
+    sb.append("timeout=" + timeout);
+    sb.append("======>");
+    logger.fine(sb.toString());
 
     ProcessBuilder processBuilder =
         new ProcessBuilder(arguments).directory(execDir.toAbsolutePath().toFile());
@@ -453,7 +455,10 @@ class Executor {
       return ExecutionDebugger.performBeforeExecutionDebug(processBuilder, limits, resultBuilder);
     }
 
-    boolean usePersistentWorker = limits.unusedProperties.containsKey("persistentWorkerKey");
+    boolean usePersistentWorker = !limits.persistentWorkerKey.isEmpty();
+    if (usePersistentWorker) {
+      logger.log(Level.FINE, "got persistentWorkerKey of : " + limits.persistentWorkerKey);
+    }
 
     boolean isJavaBuilder = arguments.contains(
         "external/remote_java_tools/java_tools/JavaBuilder_deploy.jar");

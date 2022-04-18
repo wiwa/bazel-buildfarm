@@ -1,6 +1,10 @@
 package build.buildfarm.worker.util;
 
+import java.io.IOException;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.util.Map;
 
 import com.google.common.collect.ImmutableMap;
@@ -39,6 +43,19 @@ public class TreeWalker {
             if (prop.getName() == "bazel_tool_input") {
               String msg = "!!!:Found bazel_tool_input of: " + path;
               System.out.println(msg + "\n" + msg);
+              System.err.println(msg + "\n" + msg);
+              try {
+                Path logpath = Paths.get("/tmp/buildfarm/treewalker.log");
+                Files.write(
+                  logpath,
+                  msg.getBytes(),
+                  StandardOpenOption.CREATE,
+                  StandardOpenOption.WRITE,
+                  StandardOpenOption.APPEND
+                );
+              } catch (IOException e) {
+                e.printStackTrace();
+              }
             }
           }
           acc.put(

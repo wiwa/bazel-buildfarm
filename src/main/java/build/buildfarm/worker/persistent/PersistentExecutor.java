@@ -152,7 +152,7 @@ public class PersistentExecutor {
       e.printStackTrace();
       response = WorkResponse.newBuilder()
           .setOutput("Exception while running request: " + e)
-          .setExitCode(1)
+          .setExitCode(-1) // incomplete
           .build();
     }
 
