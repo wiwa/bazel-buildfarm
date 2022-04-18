@@ -68,6 +68,7 @@ public class ExecutionPropertiesParser {
     parser.put(ExecutionProperties.SKIP_SLEEP, ExecutionPropertiesParser::storeSkipSleep);
     parser.put(ExecutionProperties.TIME_SHIFT, ExecutionPropertiesParser::storeTimeShift);
     parser.put(ExecutionProperties.CONTAINER_IMAGE, ExecutionPropertiesParser::storeContainerImage);
+    parser.put(ExecutionProperties.PERSISTENT_WORKER_KEY, ExecutionPropertiesParser::storePersistentWorkerKey);
     parser.put(
         ExecutionProperties.DEBUG_BEFORE_EXECUTION,
         ExecutionPropertiesParser::storeBeforeExecutionDebug);
@@ -83,28 +84,6 @@ public class ExecutionPropertiesParser {
         .getPlatform()
         .getPropertiesList()
         .forEach((property) -> evaluateProperty(parser, limits, property));
-        
-    Logger logger = Logger.getLogger("ExecutionPropertiesParser");
-    try {
-      java.nio.file.Path logPath = Paths.get("/tmp/buildfarm/log-from-worker.log");
-      Files.createDirectories(logPath);
-      FileHandler fh = new FileHandler(logPath.toAbsolutePath().toString());
-      logger.addHandler(fh);
-    } catch (IOException e) {
-      e.printStackTrace();
-      logger.log(Level.SEVERE, "Couldn't make log FileHandler: " + e.getMessage());
-    }
-
-    StringBuilder sb = new StringBuilder();
-    sb.append("RLS: ResourceLimits");
-    for (Map.Entry<String, String> kv : limits.unusedProperties.entrySet()) {
-      sb.append("\n\t" + kv.getKey() + ":" + kv.getValue());
-    }
-    sb.append("getOutputNodePropertiesList");
-    for (String npstr : command.getOutputNodePropertiesList()) {
-      sb.append(npstr);
-    }
-    logger.warning(sb.toString());
 
     return limits;
   }
@@ -303,6 +282,20 @@ public class ExecutionPropertiesParser {
     limits.containerSettings.containerImage = property.getValue();
     describeChange(
         limits.containerSettings.description, "container image", property.getValue(), property);
+  }
+
+  /**
+   * @brief Stores persistentWorkerKey
+   * @details Parses and stores a String.
+   * @param limits Current limits to apply changes to.
+   * @param property The property to store.
+   */
+  private static void storePersistentWorkerKey(ResourceLimits limits, Property property) {
+    limits.persistentWorkerKey = property.getValue();
+    ArrayList<String> xs = new ArrayList<>();
+    xs.add("Hash of tool inputs for remote persistent workers");
+    describeChange(
+      xs, "persistentWorkerKey(hash of tool inputs)", property.getValue(), property);
   }
 
   /**

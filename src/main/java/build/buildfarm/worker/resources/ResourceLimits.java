@@ -143,6 +143,13 @@ public class ResourceLimits {
   public String debugTarget = "";
 
   /**
+   * @field persistentWorkerKey
+   * @brief Hash of tool inputs for remote persistent workers
+   * @details See https://github.com/bazelbuild/bazel/issues/10091
+   */
+  public String persistentWorkerKey = "";
+
+  /**
    * @field unusedProperties
    * @brief Exec_properties that were not used when deciding resource limits.
    * @details Foreign platform properties may be be added to the command that are ignored when
