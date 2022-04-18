@@ -24,7 +24,11 @@ public class WorkFilesContext {
 
   public final ImmutableList<String> outputDirectories;
 
+  private final TreeWalker treeWalker;
+
   private ImmutableMap<Path, Input> pathInputs = null;
+
+  private ImmutableMap<Path, Input> toolInputs = null;
 
   public WorkFilesContext(
       Path opRoot,
@@ -38,15 +42,26 @@ public class WorkFilesContext {
     this.outputPaths = outputPaths;
     this.outputFiles = outputFiles;
     this.outputDirectories = outputDirectories;
+
+    this.treeWalker = new TreeWalker(execTree);
   }
 
   // Paths are absolute paths from the opRoot; same as the Input.getPath();
   public ImmutableMap<Path, Input> getPathInputs() {
     synchronized (this) {
       if (pathInputs == null) {
-        pathInputs = new TreeWalker(execTree).getInputs(opRoot);
+        pathInputs = treeWalker.getAllInputs(opRoot);
       }
     }
     return pathInputs;
+  }
+
+  public ImmutableMap<Path, Input> getToolInputs() {
+    synchronized (this) {
+      if (toolInputs == null) {
+        toolInputs = treeWalker.getToolInputs(opRoot);
+      }
+    }
+    return toolInputs;
   }
 }

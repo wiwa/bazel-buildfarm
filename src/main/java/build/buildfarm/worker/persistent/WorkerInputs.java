@@ -92,8 +92,7 @@ public class WorkerInputs {
     
     ImmutableMap<Path, Input> pathInputs = workFilesContext.getPathInputs();
 
-    ImmutableList<Path> inputAbsPaths = ImmutableList.copyOf(pathInputs.keySet().asList());
-    ImmutableSet<Path> toolsAbsPaths = InputsExtractor.getToolFiles(inputAbsPaths);
+    ImmutableSet<Path> toolsAbsPaths = workFilesContext.getToolInputs().keySet();
 
     ImmutableSet<Path> toolInputs = ImmutableSet.copyOf(
         toolsAbsPaths

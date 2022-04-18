@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.util.Map;
 import java.util.logging.Logger;
+import java.util.Optional;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
@@ -23,46 +24,81 @@ public class TreeWalker {
 
   private static final Logger logger = Logger.getLogger("TreeWalker");
 
-  Tree tree;
-  Map<Digest, Directory> proxyDirs;
+  final Tree tree;
+  final Map<Digest, Directory> proxyDirs;
+  
+  ImmutableMap<Path, FileNode> files = null;
+  ImmutableMap<Path, Input> absPathInputs = null;
+  ImmutableMap<Path, Input> toolInputs = null;
 
   public TreeWalker(Tree tree) {
     this.tree = tree;
     this.proxyDirs = DigestUtil.proxyDirectoriesIndex(tree.getDirectoriesMap());
   }
 
-  public ImmutableMap<Path, Input> getInputs(Path rootPath) {
-    ImmutableMap.Builder<Path, Input> accumulator = ImmutableMap.builder();
-    Directory rootDir = proxyDirs.get(tree.getRootDigest());
-    return getInputsFromDir(rootPath, rootDir, accumulator).build();
+  public ImmutableMap<Path, Input> getAllInputs(Path opRoot) {
+    if (absPathInputs == null) {
+      ImmutableMap<Path, FileNode> relFiles = getAllFiles();
+
+      ImmutableMap.Builder<Path, Input> inputs = ImmutableMap.builder();
+      for (Map.Entry<Path, FileNode> pf : relFiles.entrySet()) {
+        Path absPath = opRoot.resolve(pf.getKey());
+        inputs.put(absPath, inputFromFile(absPath, pf.getValue()));
+      }
+      absPathInputs = inputs.build();
+    }
+    return absPathInputs;
   }
 
-  private ImmutableMap.Builder<Path, Input> getInputsFromDir(
-      Path dirPath, Directory dir, ImmutableMap.Builder<Path, Input> acc
-  ) {
-    
-    dir.getFilesList().forEach(fileNode -> {
-      if (isToolInput(fileNode)) {
-        Path path = dirPath.resolve(fileNode.getName()).normalize();
-        acc.put(
-          path,
-          Input.newBuilder()
-              .setPath(path.toString())
-              .setDigest(fileNode.getDigest().getHashBytes())
-              .build()
-          );
+  public ImmutableMap<Path, Input> getToolInputs(Path opRoot) {
+    if (toolInputs == null) {
+      ImmutableMap<Path, FileNode> relFiles = getAllFiles();
+      ImmutableMap.Builder<Path, Input> inputs = ImmutableMap.builder();
+
+      for (Map.Entry<Path, FileNode> pf : relFiles.entrySet()) {
+        FileNode fn = pf.getValue();
+        if (isToolInput(fn)) {
+          Path absPath = opRoot.resolve(pf.getKey());
+          inputs.put(absPath, inputFromFile(absPath, fn));
+        }
       }
+      toolInputs = inputs.build();
+    }
+    return toolInputs;
+  }
+
+  private ImmutableMap<Path, FileNode> getAllFiles() {
+    if (files == null) {
+      ImmutableMap.Builder<Path, FileNode> accumulator = ImmutableMap.builder();
+      Directory rootDir = proxyDirs.get(tree.getRootDigest());
+      files = getFilesFromDir(Paths.get("."), rootDir, accumulator).build();
+    }
+    return files;
+  }
+
+  private Input inputFromFile(Path absPath, FileNode fileNode) {
+    return Input.newBuilder()
+      .setPath(absPath.toString())
+      .setDigest(fileNode.getDigest().getHashBytes())
+      .build();
+  }
+
+  private ImmutableMap.Builder<Path, FileNode> getFilesFromDir(
+      Path dirPath, Directory dir, ImmutableMap.Builder<Path, FileNode> acc
+  ) {
+    dir.getFilesList().forEach(fileNode -> {
+      Path path = dirPath.resolve(fileNode.getName()).normalize();
+      acc.put(path, fileNode);
     });
 
     // Recurse into subdirectories
     dir.getDirectoriesList().forEach(dirNode ->
-        getInputsFromDir(
+        getFilesFromDir(
             dirPath.resolve(dirNode.getName()),
             this.proxyDirs.get(dirNode.getDigest()),
             acc
         )
     );
-
     return acc;
   }
 
