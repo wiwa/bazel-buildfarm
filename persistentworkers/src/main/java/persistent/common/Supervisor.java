@@ -48,7 +48,7 @@ public abstract class Supervisor<K, V extends Destructable> extends BaseKeyedPoo
       msgBuilder.append(e);
     }
 
-    getLogger().log(Level.SEVERE, msgBuilder.toString());
+    getLogger().log(Level.FINE, msgBuilder.toString());
 
     obj.destroy();
   }

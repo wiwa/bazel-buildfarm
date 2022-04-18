@@ -8,6 +8,8 @@ import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
 
 import build.bazel.remote.execution.v2.Digest;
 import build.bazel.remote.execution.v2.Directory;
+import build.bazel.remote.execution.v2.NodeProperties;
+import build.bazel.remote.execution.v2.NodeProperty;
 import build.buildfarm.common.DigestUtil;
 import build.buildfarm.v1test.Tree;
 
@@ -32,6 +34,13 @@ public class TreeWalker {
   ) {
     dir.getFilesList().forEach(fileNode -> {
           Path path = dirPath.resolve(fileNode.getName()).normalize();
+          NodeProperties props = fileNode.getNodeProperties();
+          for (NodeProperty prop : props.getPropertiesList()) {
+            if (prop.getName() == "bazel_tool_input") {
+              String msg = "!!!:Found bazel_tool_input of: " + path;
+              System.out.println(msg + "\n" + msg);
+            }
+          }
           acc.put(
               path,
               Input.newBuilder()
