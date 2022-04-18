@@ -123,7 +123,8 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
       sb.append("Response output: ");
       sb.append(response.getOutput());
       sb.append("\n\tProcess stderr: ");
-      sb.append(workerRW.getProcessWrapper().getErrorString());
+      String stderr = workerRW.getProcessWrapper().getErrorString();
+      sb.append(stderr);
       logger.log(Level.SEVERE, sb.toString());
 
       // TODO might be able to remove this; scared that stdout might crash.

@@ -87,10 +87,15 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
   }
 
   private void copyInputs(WorkerInputs workerInputs, Path execRoot) throws IOException {
+    StringBuilder sb = new StringBuilder();
     for (Path opPath : workerInputs.allInputs.keySet()) {
+      if (opPath.endsWith(".params")) {
+        sb.append("\n\t" + opPath.toString());
+      }
       Path execPath = workerInputs.relativizeInput(execRoot, opPath);
       workerInputs.accessFileFrom(opPath, execPath);
     }
+    logger.fine("copyInputs[.params]: " + sb.toString() + "\n");
   }
 
   // After the worker has finished, we need to copy output files back to the operation directory
