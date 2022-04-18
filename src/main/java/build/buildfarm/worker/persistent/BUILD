@@ -5,6 +5,7 @@ java_library(
   deps = [
     "//persistentworkers/src/main/java/persistent/bazel:bazel-persistent-workers",
     "//persistentworkers/src/main/java/persistent/common:persistent-common",
+    "//persistentworkers/src/main/java/persistent/common/util",
     "//src/main/java/build/buildfarm/common",
     "//src/main/java/build/buildfarm/worker/resources",
     "//src/main/java/build/buildfarm/worker/util",

@@ -150,6 +150,13 @@ public class ResourceLimits {
   public String persistentWorkerKey = "";
 
   /**
+   * @field persistentWorkerCommand
+   * @brief Command string to start the persistent worker
+   * @details See https://github.com/bazelbuild/bazel/issues/10091
+   */
+  public String persistentWorkerCommand = "";
+
+  /**
    * @field unusedProperties
    * @brief Exec_properties that were not used when deciding resource limits.
    * @details Foreign platform properties may be be added to the command that are ignored when
