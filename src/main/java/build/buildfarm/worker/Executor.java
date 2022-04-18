@@ -461,10 +461,10 @@ class Executor {
       logger.log(Level.FINE, "got persistentWorkerKey of : " + limits.persistentWorkerKey);
     }
 
-    boolean isJavaBuilder = arguments.contains(
-        "external/remote_java_tools/java_tools/JavaBuilder_deploy.jar");
-    boolean isScalac = arguments.size() > 1 && arguments.get(0).endsWith("scalac/scalac");
-    usePersistentWorker = usePersistentWorker || isJavaBuilder || isScalac;
+    // boolean isJavaBuilder = arguments.contains(
+    //     "external/remote_java_tools/java_tools/JavaBuilder_deploy.jar");
+    // boolean isScalac = arguments.size() > 1 && arguments.get(0).endsWith("scalac/scalac");
+    // usePersistentWorker = usePersistentWorker || isJavaBuilder || isScalac;
 
     if (usePersistentWorker) {
       logger.log(Level.FINE, "usePersistentWorker");

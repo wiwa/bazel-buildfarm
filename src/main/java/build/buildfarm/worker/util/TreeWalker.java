@@ -6,18 +6,22 @@ import java.nio.file.Paths;
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 import java.util.Map;
+import java.util.logging.Logger;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
 
 import build.bazel.remote.execution.v2.Digest;
 import build.bazel.remote.execution.v2.Directory;
+import build.bazel.remote.execution.v2.FileNode;
 import build.bazel.remote.execution.v2.NodeProperties;
 import build.bazel.remote.execution.v2.NodeProperty;
 import build.buildfarm.common.DigestUtil;
 import build.buildfarm.v1test.Tree;
 
 public class TreeWalker {
+
+  private static final Logger logger = Logger.getLogger("TreeWalker");
 
   Tree tree;
   Map<Digest, Directory> proxyDirs;
@@ -36,37 +40,19 @@ public class TreeWalker {
   private ImmutableMap.Builder<Path, Input> getInputsFromDir(
       Path dirPath, Directory dir, ImmutableMap.Builder<Path, Input> acc
   ) {
+    
     dir.getFilesList().forEach(fileNode -> {
-          Path path = dirPath.resolve(fileNode.getName()).normalize();
-          NodeProperties props = fileNode.getNodeProperties();
-          for (NodeProperty prop : props.getPropertiesList()) {
-            if (prop.getName() == "bazel_tool_input") {
-              String msg = "!!!:Found bazel_tool_input of: " + path;
-              System.out.println(msg + "\n" + msg);
-              System.err.println(msg + "\n" + msg);
-              try {
-                Path logpath = Paths.get("/tmp/buildfarm/treewalker.log");
-                Files.write(
-                  logpath,
-                  msg.getBytes(),
-                  StandardOpenOption.CREATE,
-                  StandardOpenOption.WRITE,
-                  StandardOpenOption.APPEND
-                );
-              } catch (IOException e) {
-                e.printStackTrace();
-              }
-            }
-          }
-          acc.put(
-              path,
-              Input.newBuilder()
-                  .setPath(path.toString())
-                  .setDigest(fileNode.getDigest().getHashBytes())
-                  .build()
+      if (isToolInput(fileNode)) {
+        Path path = dirPath.resolve(fileNode.getName()).normalize();
+        acc.put(
+          path,
+          Input.newBuilder()
+              .setPath(path.toString())
+              .setDigest(fileNode.getDigest().getHashBytes())
+              .build()
           );
-        }
-    );
+      }
+    });
 
     // Recurse into subdirectories
     dir.getDirectoriesList().forEach(dirNode ->
@@ -78,5 +64,14 @@ public class TreeWalker {
     );
 
     return acc;
+  }
+
+  private static boolean isToolInput(FileNode fileNode) {
+    for (NodeProperty prop : fileNode.getNodeProperties().getPropertiesList()) {
+      if (prop.getName().equals("bazel_tool_input")) {
+        return true;
+      }
+    }
+    return false;
   }
 }
