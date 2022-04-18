@@ -11,3 +11,7 @@ fetch:remcache --repository_cache=./bf-cache/bazel/repo
 build:remcache --disk_cache=./bf-cache/bazel/buildcache
 query:remcache --disk_cache=./bf-cache/bazel/buildcache
 fetch:remcache --disk_cache=./bf-cache/bazel/buildcache
+
+# User-specific .bazelrc
+try-import user.bazelrc
+
