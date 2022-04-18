@@ -34,7 +34,7 @@ public class FileAccessUtils {
       try {
         Files.createDirectories(to.getParent());
         if (!Files.exists(absTo)) {
-          logger.finest("copyFile: " + from + " to " + absTo);
+          logger.fine("copyFile: " + from + " to " + absTo);
           Files.copy(from, to, REPLACE_EXISTING, COPY_ATTRIBUTES);
         }
       } finally {
