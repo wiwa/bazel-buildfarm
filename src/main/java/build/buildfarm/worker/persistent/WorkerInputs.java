@@ -28,16 +28,20 @@ public class WorkerInputs {
 
   public final ImmutableSet<Path> allToolInputs;
 
+  public final ImmutableSet<Path> missingArgsfiles;
+
   public WorkerInputs(
       Path opRoot,
       ImmutableSet<Path> absToolInputs,
       ImmutableSet<Path> opToolInputs,
-      ImmutableMap<Path, Input> allInputs
+      ImmutableMap<Path, Input> allInputs,
+      ImmutableSet<Path> missingArgsfiles
   ) {
     this.opRoot = opRoot;
     this.absToolInputs = absToolInputs;
     this.opToolInputs = opToolInputs;
     this.allInputs = allInputs;
+    this.missingArgsfiles = missingArgsfiles;
 
     this.allToolInputs = ImmutableSet.<Path>builder()
         .addAll(absToolInputs)
@@ -85,18 +89,10 @@ public class WorkerInputs {
   }
 
   public static WorkerInputs from(WorkFilesContext workFilesContext, List<String> reqArgs) {
+    
     ImmutableMap<Path, Input> pathInputs = workFilesContext.getPathInputs();
 
-    ImmutableList.Builder<Path> inputAbsPathsBuilder = ImmutableList.builder();
-    inputAbsPathsBuilder.addAll(pathInputs.keySet());
-    List<Path> absArgsfiles = argsFiles(workFilesContext.opRoot, reqArgs);
-    for (Path p : absArgsfiles) {
-      if (!pathInputs.containsKey(p)) {
-        inputAbsPathsBuilder.add(p);
-      }
-    }
-    ImmutableList<Path> inputAbsPaths = inputAbsPathsBuilder.build();
-
+    ImmutableList<Path> inputAbsPaths = ImmutableList.copyOf(pathInputs.keySet().asList());
     ImmutableSet<Path> toolsAbsPaths = InputsExtractor.getToolFiles(inputAbsPaths);
 
     ImmutableSet<Path> toolInputs = ImmutableSet.copyOf(
@@ -111,15 +107,25 @@ public class WorkerInputs {
             .filter(p -> !toolInputs.contains(p))
             .iterator()
     );
+    
+    ImmutableSet.Builder<Path> missingArgsfilesBuilder = ImmutableSet.builder();
+    List<Path> absArgsfiles = argsFiles(workFilesContext.opRoot, reqArgs);
+    for (Path p : absArgsfiles) {
+      if (!pathInputs.containsKey(p)) {
+        missingArgsfilesBuilder.add(p);
+      }
+    }
+    ImmutableSet<Path> missingArgsfiles = missingArgsfilesBuilder.build();
 
     String inputsDebugMsg = "ParsedWorkFiles:" +
         "\nallInputs: " + pathInputs.keySet() +
         "\ntoolInputs: " + toolInputs +
-        "\nabsToolInputs: " + absToolInputs;
+        "\nabsToolInputs: " + absToolInputs +
+        "\nmissingArgsFiles " + missingArgsfiles;
 
     logger.fine(inputsDebugMsg);
 
-    return new WorkerInputs(workFilesContext.opRoot, absToolInputs, toolInputs, pathInputs);
+    return new WorkerInputs(workFilesContext.opRoot, absToolInputs, toolInputs, pathInputs, missingArgsfiles);
   }
 
   private static List<Path> argsFiles(Path opRoot, List<String> reqArgs) {
