@@ -133,7 +133,7 @@ public class WorkerInputs {
     for (String a : reqArgs) {
       if (Args.isArgsFile(a)) {
         try {
-          files.add(opRoot.resolve(Paths.get(a)));
+          files.add(opRoot.resolve(Paths.get(a.substring(1))));
         } catch (Exception ignored) {}
       }
     }
