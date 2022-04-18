@@ -18,10 +18,20 @@ import build.bazel.remote.execution.v2.Command;
 import build.bazel.remote.execution.v2.Platform.Property;
 import build.buildfarm.common.ExecutionProperties;
 import build.buildfarm.common.MapUtils;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.logging.FileHandler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
@@ -32,6 +42,7 @@ import org.json.simple.parser.ParseException;
  *     Buildfarm may further modify these choices based on its own configuration and constraints.
  */
 public class ExecutionPropertiesParser {
+
   /**
    * @brief Decide resource limitations for the given command.
    * @details Platform properties from specified exec_properties are taken into account when
@@ -72,15 +83,28 @@ public class ExecutionPropertiesParser {
         .getPlatform()
         .getPropertiesList()
         .forEach((property) -> evaluateProperty(parser, limits, property));
+        
+    Logger logger = Logger.getLogger("ExecutionPropertiesParser");
+    try {
+      java.nio.file.Path logPath = Paths.get("/tmp/buildfarm/log-from-worker.log");
+      Files.createDirectories(logPath);
+      FileHandler fh = new FileHandler(logPath.toAbsolutePath().toString());
+      logger.addHandler(fh);
+    } catch (IOException e) {
+      e.printStackTrace();
+      logger.log(Level.SEVERE, "Couldn't make log FileHandler: " + e.getMessage());
+    }
 
-    System.out.println("RLS");
+    StringBuilder sb = new StringBuilder();
+    sb.append("RLS: ResourceLimits");
     for (Map.Entry<String, String> kv : limits.unusedProperties.entrySet()) {
-      System.out.println(kv.getKey() + ":" + kv.getValue());
+      sb.append("\n\t" + kv.getKey() + ":" + kv.getValue());
     }
-    System.out.println("getOutputNodePropertiesList");
+    sb.append("getOutputNodePropertiesList");
     for (String npstr : command.getOutputNodePropertiesList()) {
-      System.out.println(npstr);
+      sb.append(npstr);
     }
+    logger.warning(sb.toString());
 
     return limits;
   }
