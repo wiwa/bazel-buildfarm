@@ -293,4 +293,11 @@ public class ExecutionProperties {
    * @details See https://github.com/bazelbuild/bazel/issues/10091
    */
   public static final String PERSISTENT_WORKER_KEY = "persistentWorkerKey";
+
+  /**
+   * @field PERSISTENT_WORKER_COMMAND
+   * @brief Command string to start the persistent worker
+   * @details See https://github.com/bazelbuild/bazel/issues/10091
+   */
+  public static final String PERSISTENT_WORKER_COMMAND = "persistentWorkerCommand";
 }

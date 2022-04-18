@@ -49,6 +49,7 @@ public class PersistentExecutor {
    * 5) Passes output to the resultBuilder
    */
   public static Code runOnPersistentWorker(
+      String persistentWorkerInitCmd,
       WorkFilesContext context,
       String operationName,
       ImmutableList<String> argsList,
@@ -62,46 +63,47 @@ public class PersistentExecutor {
 
     logger.log(Level.FINE, "executeCommandOnPersistentWorker[" + operationName + "]");
 
+    ImmutableList<String> initCmd = parseInitCmd(persistentWorkerInitCmd, argsList);
+
     String executionName = getExecutionName(argsList);
     if (executionName.isEmpty()) {
       logger.log(Level.SEVERE, "Invalid Argument?!: " + argsList);
       return Code.INVALID_ARGUMENT;
     }
 
-    int jarOrBinIdx;
+    // int jarOrBinIdx;
     ImmutableMap<String, String> env;
     if (executionName.equals(JAVAC_EXEC_NAME)) {
       env = ImmutableMap.of();
-      jarOrBinIdx = argsList.indexOf(JAVABUILDER_JAR);
     } else {
       // Scalac
-      jarOrBinIdx = 0;
       env = envVars;
     }
 
-    //// Parse args into initial tool startup and action request
+    // //// Parse args into initial tool startup and action request
 
-    // flags aren't part of the request
-    // this should definitely fail on a flag with a param...
-    // Maybe hardcode to first argsfile? if only I could build bazel.
-    int requestArgsIdx = jarOrBinIdx + 1;
-    for (String s : argsList) {
-      if (s.startsWith("-")) {
-        requestArgsIdx = Math.max(requestArgsIdx, argsList.lastIndexOf(s) + 1);
-      }
-    }
-    List<String> flags = argsList.subList(jarOrBinIdx + 1, requestArgsIdx);
+    // // flags aren't part of the request
+    // // this should definitely fail on a flag with a param...
+    // // Maybe hardcode to first argsfile? if only I could build bazel.
+    // int requestArgsIdx = jarOrBinIdx + 1;
+    // for (String s : argsList) {
+    //   if (s.startsWith("-")) {
+    //     requestArgsIdx = Math.max(requestArgsIdx, argsList.lastIndexOf(s) + 1);
+    //   }
+    // }
+    // List<String> flags = argsList.subList(jarOrBinIdx + 1, requestArgsIdx);
 
-    ImmutableList<String> workerExecCmd = argsList.subList(0, jarOrBinIdx + 1);
+    int requestArgsIdx = initCmd.size();
+    ImmutableList<String> workerExecCmd = initCmd; // argsList.subList(0, jarOrBinIdx + 1);
     ImmutableList<String> workerInitArgs = ImmutableList.<String>builder()
-        .addAll(flags)
+        //.addAll(flags)
         .add(PERSISTENT_WORKER_FLAG)
         .build();
     ImmutableList<String> requestArgs = argsList.subList(requestArgsIdx, argsList.size());
 
     //// Make Key
 
-    WorkerInputs workerFiles = WorkerInputs.from(context);
+    WorkerInputs workerFiles = WorkerInputs.from(context, requestArgs);
 
     Path binary = Paths.get(workerExecCmd.get(0));
     if (!workerFiles.containsTool(binary) && !binary.isAbsolute()) {
@@ -175,6 +177,28 @@ public class PersistentExecutor {
     return Code.FAILED_PRECONDITION;
   }
 
+  private static ImmutableList<String> parseInitCmd(String cmdStr, ImmutableList<String> argsList) {
+    if (cmdStr.isEmpty() || !cmdStr.endsWith(PERSISTENT_WORKER_FLAG)) {
+      throw new IllegalArgumentException("parseInitCmd?[" + cmdStr + "]" + "\n" + argsList);
+    }
+
+    String cmd = cmdStr.strip().substring(0, (cmdStr.length() - PERSISTENT_WORKER_FLAG.length()) - 1);
+
+    ImmutableList.Builder<String> initCmdBuilder = ImmutableList.builder();
+    for (String s : argsList) {
+      if (cmd.length() == 0) {
+        break;
+      }
+      cmd = cmd.substring(s.length()).strip();
+      initCmdBuilder.add(s);
+    }
+    ImmutableList<String> initCmd = initCmdBuilder.build();
+    if (!initCmd.equals(argsList.subList(0, initCmd.size()))) {
+      throw new IllegalArgumentException("parseInitCmd?![" + initCmd + "]" + "\n" + argsList);
+    }
+    return initCmd;
+  }
+
   private static String getExecutionName(ImmutableList<String> argsList) {
     boolean isScalac = argsList.size() > 1 && argsList.get(0).endsWith("scalac/scalac");
     if (isScalac) {
@@ -182,6 +206,6 @@ public class PersistentExecutor {
     } else if (argsList.contains(JAVABUILDER_JAR)) {
       return JAVAC_EXEC_NAME;
     }
-    return "";
+    return "SomeOtherExec";
   }
 }

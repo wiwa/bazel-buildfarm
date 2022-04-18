@@ -457,9 +457,6 @@ class Executor {
     }
 
     boolean usePersistentWorker = !limits.persistentWorkerKey.isEmpty();
-    if (usePersistentWorker) {
-      logger.log(Level.FINE, "got persistentWorkerKey of : " + limits.persistentWorkerKey);
-    }
 
     // boolean isJavaBuilder = arguments.contains(
     //     "external/remote_java_tools/java_tools/JavaBuilder_deploy.jar");
@@ -467,7 +464,8 @@ class Executor {
     // usePersistentWorker = usePersistentWorker || isJavaBuilder || isScalac;
 
     if (usePersistentWorker) {
-      logger.log(Level.FINE, "usePersistentWorker");
+      logger.log(Level.FINE, "");
+      logger.log(Level.FINE, "usePersistentWorker; got persistentWorkerCommand of : " + limits.persistentWorkerCommand);
 
       Tree execTree = workerContext.getQueuedOperation(operationContext.queueEntry).getTree();
 
@@ -480,6 +478,7 @@ class Executor {
       );
 
       return PersistentExecutor.runOnPersistentWorker(
+          limits.persistentWorkerCommand,
           filesContext,
           operationName,
           ImmutableList.copyOf(arguments),

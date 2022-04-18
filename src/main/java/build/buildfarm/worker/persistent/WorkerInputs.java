@@ -2,6 +2,9 @@ package build.buildfarm.worker.persistent;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Logger;
 
 import com.google.common.collect.ImmutableList;
@@ -9,6 +12,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
 import com.google.protobuf.ByteString;
+
+import persistent.common.util.Args;
 
 public class WorkerInputs {
 
@@ -79,10 +84,19 @@ public class WorkerInputs {
     return input.getDigest();
   }
 
-  public static WorkerInputs from(WorkFilesContext workFilesContext) {
+  public static WorkerInputs from(WorkFilesContext workFilesContext, List<String> reqArgs) {
     ImmutableMap<Path, Input> pathInputs = workFilesContext.getPathInputs();
 
-    ImmutableList<Path> inputAbsPaths = pathInputs.keySet().asList();
+    ImmutableList.Builder<Path> inputAbsPathsBuilder = ImmutableList.builder();
+    inputAbsPathsBuilder.addAll(pathInputs.keySet());
+    List<Path> absArgsfiles = argsFiles(workFilesContext.opRoot, reqArgs);
+    for (Path p : absArgsfiles) {
+      if (!pathInputs.containsKey(p)) {
+        inputAbsPathsBuilder.add(p);
+      }
+    }
+    ImmutableList<Path> inputAbsPaths = inputAbsPathsBuilder.build();
+
     ImmutableSet<Path> toolsAbsPaths = InputsExtractor.getToolFiles(inputAbsPaths);
 
     ImmutableSet<Path> toolInputs = ImmutableSet.copyOf(
@@ -106,5 +120,17 @@ public class WorkerInputs {
     logger.fine(inputsDebugMsg);
 
     return new WorkerInputs(workFilesContext.opRoot, absToolInputs, toolInputs, pathInputs);
+  }
+
+  private static List<Path> argsFiles(Path opRoot, List<String> reqArgs) {
+    List<Path> files = new ArrayList<>();
+    for (String a : reqArgs) {
+      if (Args.isArgsFile(a)) {
+        try {
+          files.add(opRoot.resolve(Paths.get(a)));
+        } catch (Exception ignored) {}
+      }
+    }
+    return files;
   }
 }
