@@ -8,6 +8,7 @@ import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 
@@ -88,7 +89,11 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
 
   private void copyInputs(WorkerInputs workerInputs, Path execRoot) throws IOException {
     StringBuilder sb = new StringBuilder();
-    for (Path opPath : workerInputs.allInputs.keySet()) {
+    ImmutableSet<Path> inputsWithArgsFiles = ImmutableSet.<Path>builder()
+      .addAll(workerInputs.allInputs.keySet())
+      .addAll(workerInputs.missingArgsfiles)
+      .build();
+    for (Path opPath : inputsWithArgsFiles) {
       if (opPath.endsWith(".params")) {
         sb.append("\n\t" + opPath.toString());
       }
