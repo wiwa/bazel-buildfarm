@@ -32,9 +32,12 @@ public class FileAccessUtils {
     EasyMonitor toLock = fileLock(absTo);
     synchronized(toLock) {
       try {
-        Files.createDirectories(to.getParent());
         if (!Files.exists(absTo)) {
-          logger.fine("copyFile: " + from + " to " + absTo);
+          Files.createDirectories(to.getParent());
+          logger.finer("copyFile: " + from + " to " + absTo);
+          if (!Files.exists(from)) {
+            throw new IOException("copyFile: source file doesn't exist: " + from);
+          }
           Files.copy(from, to, REPLACE_EXISTING, COPY_ATTRIBUTES);
         }
       } finally {

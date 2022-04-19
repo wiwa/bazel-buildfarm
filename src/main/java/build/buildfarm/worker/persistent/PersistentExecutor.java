@@ -6,8 +6,10 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -129,7 +131,21 @@ public class PersistentExecutor {
 
     //// Make request
 
-    ImmutableList<Input> reqInputs = workerFiles.allInputs.values().asList();
+    // Inputs should be relative paths (if they are from operation root)
+    ImmutableList.Builder<Input> reqInputsBuilder = ImmutableList.builder();
+
+    for (Map.Entry<Path, Input> opInput : workerFiles.allInputs.entrySet()) {
+      Input relInput = opInput.getValue();
+      Path opPath = opInput.getKey();
+      if (opPath.startsWith(workerFiles.opRoot)) {
+        relInput = relInput
+            .toBuilder()
+            .setPath(workerFiles.opRoot.relativize(opPath).toString())
+            .build();
+      }
+      reqInputsBuilder.add(relInput);
+    }
+    ImmutableList<Input> reqInputs = reqInputsBuilder.build();
 
     WorkRequest request = WorkRequest.newBuilder()
         .addAllArguments(requestArgs)
@@ -151,10 +167,16 @@ public class PersistentExecutor {
       response = fullResponse.response;
       stdErr = fullResponse.errorString;
     } catch (Exception e) {
-      logger.log(Level.SEVERE, "Exception while running request: " + e.getMessage());
+
+      String debug = "\n\tRequest.initCmd: " + workerExecCmd +
+                     "\n\tRequest.initArgs: " + workerInitArgs +
+                     "\n\tRequest.requestArgs: " + request.getArgumentsList();
+      String msg = "Exception while running request: " + e + debug + "\n\n";
+
+      logger.log(Level.SEVERE, msg);
       e.printStackTrace();
       response = WorkResponse.newBuilder()
-          .setOutput("Exception while running request: " + e)
+          .setOutput(msg)
           .setExitCode(-1) // incomplete
           .build();
     }
@@ -173,7 +195,16 @@ public class PersistentExecutor {
     if (exitCode == 0) {
       return Code.OK;
     }
-    logger.log(Level.SEVERE, "Wtf? " + exitCode + "\n" + responseOut);
+
+    if (executionName.equals("SomeOtherExec")) {
+      System.out.println("SomeOtherExec inputs: " +
+          ImmutableList.copyOf(reqInputs.stream().map(Input::getPath).collect(Collectors.toList()))
+      );
+    }
+    logger.severe(
+        "PersistentExecutor.runOnPersistentWorker Failed with code: " +
+        exitCode + "\n" + responseOut
+    );
     return Code.FAILED_PRECONDITION;
   }
 

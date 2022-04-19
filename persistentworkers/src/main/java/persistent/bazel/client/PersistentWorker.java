@@ -91,8 +91,9 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
   public String flushStdErr() {
     try {
       return this.workerRW.getProcessWrapper().flushErrorString();
-    } catch (IOException ignored) {
-      return "";
+    } catch (IOException e) {
+      e.printStackTrace();
+      return "flushStdErr Exception: " + e;
     }
   }
 
@@ -117,25 +118,25 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
     int returnCode = response.getExitCode();
     if (returnCode != 0) {
       StringBuilder sb = new StringBuilder();
-      sb.append("logBadResponse()");
+      sb.append("logBadResponse(err)");
       sb.append("\nResponse non-zero exit_code: ");
       sb.append(returnCode);
-      sb.append("Response output: ");
+      sb.append("\nResponse output: ");
       sb.append(response.getOutput());
       sb.append("\n\tProcess stderr: ");
       String stderr = workerRW.getProcessWrapper().getErrorString();
       sb.append(stderr);
       logger.log(Level.SEVERE, sb.toString());
 
-      // TODO might be able to remove this; scared that stdout might crash.
-      StringBuilder sb2 = new StringBuilder();
-      sb2.append("logBadResponse()");
-      sb2.append("\n\tProcess stdout: ");
-      IOUtils.readLines(workerRW.getProcessWrapper().getStdOut(), UTF_8).forEach(s -> {
-        sb2.append(s);
-        sb2.append("\n\t");
-      });
-      logger.log(Level.SEVERE, sb2.toString());
+      // // TODO might be able to remove this; scared that stdout might crash.
+      // StringBuilder sb2 = new StringBuilder();
+      // sb2.append("\nlogBadResponse(out)");
+      // sb2.append("\n\tProcess stdout: ");
+      // IOUtils.readLines(workerRW.getProcessWrapper().getStdOut(), UTF_8).forEach(s -> {
+      //   sb2.append(s);
+      //   sb2.append("\n\t");
+      // });
+      // logger.log(Level.SEVERE, sb2.toString());
     }
   }
 
