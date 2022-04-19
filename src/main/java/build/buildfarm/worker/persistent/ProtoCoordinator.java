@@ -120,21 +120,24 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
   public ResponseCtx postWorkCleanup(
       WorkResponse response, PersistentWorker worker, RequestCtx request
   ) throws IOException {
-    WorkFilesContext context = request.filesContext;
-    try {
-      exposeOutputFiles(context, worker.getExecRoot());
-    } catch (IOException e) {
-      StringBuilder sb = new StringBuilder();
-      // Why is paths empty when files are not?
-      sb.append("Output files failure debug for request with args<" + request.request.getArgumentsList() + ">:\n");
-      sb.append("getOutputPathsList:\n");
-      sb.append(context.outputPaths);
-      sb.append("getOutputFilesList:\n");
-      sb.append(context.outputFiles);
-      sb.append("getOutputDirectoriesList:\n");
-      sb.append(context.outputDirectories);
-      logger.severe(sb.toString());
-      throw new IOException("Failed on exposeOutputFiles", e);
+    if (response.getExitCode() == 0) {
+      WorkFilesContext context = request.filesContext;
+      try {
+        exposeOutputFiles(context, worker.getExecRoot());
+      } catch (IOException e) {
+        StringBuilder sb = new StringBuilder();
+        // Why is paths empty when files are not?
+        sb.append(
+            "Output files failure debug for request with args<" + request.request.getArgumentsList() + ">:\n");
+        sb.append("getOutputPathsList:\n");
+        sb.append(context.outputPaths);
+        sb.append("getOutputFilesList:\n");
+        sb.append(context.outputFiles);
+        sb.append("getOutputDirectoriesList:\n");
+        sb.append(context.outputDirectories);
+        logger.severe(sb.toString());
+        throw new IOException("Response was OK but failed on exposeOutputFiles", e);
+      }
     }
 
     return new ResponseCtx(response, worker.flushStdErr());
