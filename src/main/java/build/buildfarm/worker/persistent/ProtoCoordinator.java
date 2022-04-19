@@ -8,6 +8,7 @@ import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
@@ -29,6 +30,8 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
 
   private static final Logger logger = Logger.getLogger(ProtoCoordinator.class.getName());
 
+  private static final String WORKER_INIT_LOG_SUFFIX = ".initargs.log";
+
   public ProtoCoordinator(CommonsWorkerPool workerPool) {
     super(workerPool);
   }
@@ -47,7 +50,22 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
       public PersistentWorker create(WorkerKey workerKey) throws Exception {
         Path keyExecRoot = workerKey.getExecRoot();
         String workerExecDir = getUniqueSubdir(keyExecRoot);
-        loadToolsIntoWorkerRoot(workerKey, keyExecRoot.resolve(workerExecDir));
+        Path workerExecRoot = keyExecRoot.resolve(workerExecDir);
+        loadToolsIntoWorkerRoot(workerKey, workerExecRoot);
+
+        Path initArgsLogFile = workerExecRoot.resolve(workerExecDir + WORKER_INIT_LOG_SUFFIX);
+        if (!Files.exists(initArgsLogFile)) {
+          StringBuilder initArgs = new StringBuilder();
+          for (String s : workerKey.getCmd()) {
+            initArgs.append(s);
+          }
+          for (String s : workerKey.getArgs()) {
+            initArgs.append(s);
+          }
+
+          Files.write(initArgsLogFile, initArgs.toString().getBytes());
+        }
+
         return new PersistentWorker(workerKey, workerExecDir);
       }
     };
@@ -100,24 +118,28 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
   public ResponseCtx postWorkCleanup(
       WorkResponse response, PersistentWorker worker, RequestCtx request
   ) throws IOException {
-
-    exposeOutputFiles(request.filesContext, worker.getExecRoot());
+    WorkFilesContext context = request.filesContext;
+    try {
+      exposeOutputFiles(context, worker.getExecRoot());
+    } catch (IOException e) {
+      StringBuilder sb = new StringBuilder();
+      // Why is paths empty when files are not?
+      sb.append("Output files failure debug for request with args<" + request.request.getArgumentsList() + ">:\n");
+      sb.append("getOutputPathsList:\n");
+      sb.append(context.outputPaths);
+      sb.append("getOutputFilesList:\n");
+      sb.append(context.outputFiles);
+      sb.append("getOutputDirectoriesList:\n");
+      sb.append(context.outputDirectories);
+      logger.severe(sb.toString());
+      throw new IOException("Failed on exposeOutputFiles", e);
+    }
 
     return new ResponseCtx(response, worker.flushStdErr());
   }
 
   private void exposeOutputFiles(WorkFilesContext context, Path workerExecRoot) throws IOException {
     Path opRoot = context.opRoot;
-
-    StringBuilder sb = new StringBuilder();
-    // Why is paths empty when files are not?
-    sb.append("getOutputPathsList:\n");
-    sb.append(context.outputPaths);
-    sb.append("getOutputFilesList:\n");
-    sb.append(context.outputFiles);
-    sb.append("getOutputDirectoriesList:\n");
-    sb.append(context.outputDirectories);
-    logger.fine(sb.toString());
 
     // ??? see DockerExecutor::copyOutputsOutOfContainer
     for (String outputDir : context.outputDirectories) {
