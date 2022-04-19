@@ -58,9 +58,11 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
           StringBuilder initArgs = new StringBuilder();
           for (String s : workerKey.getCmd()) {
             initArgs.append(s);
+            initArgs.append("\n");
           }
           for (String s : workerKey.getArgs()) {
             initArgs.append(s);
+            initArgs.append("\n");
           }
 
           Files.write(initArgsLogFile, initArgs.toString().getBytes());
