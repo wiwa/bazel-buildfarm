@@ -121,12 +121,7 @@ public class PersistentExecutor {
         workerFiles
     );
 
-    //// Copy tool inputs as needed
-    Path workToolRoot = key.getExecRoot().resolve(PersistentWorker.TOOL_INPUT_SUBDIR);
-    for (Path opToolPath : workerFiles.opToolInputs) {
-      Path workToolPath = workerFiles.relativizeInput(workToolRoot, opToolPath);
-      workerFiles.accessFileFrom(opToolPath, workToolPath);
-    }
+    coordinator.ensureWorkerKeyToolInputs(key, workerFiles);
 
 
     //// Make request

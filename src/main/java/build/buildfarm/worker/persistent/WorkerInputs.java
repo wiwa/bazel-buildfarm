@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
@@ -62,18 +61,26 @@ public class WorkerInputs {
     return newRoot.resolve(opRoot.relativize(input));
   }
 
-  /**
-   * After this method is called, 'fileToAccess' will be accessible via 'accessFrom'
-   *
-   * @param fileToAccess absolute path
-   * @param accessFrom   absolute path
-   */
-  public void accessFileFrom(Path fileToAccess, Path accessFrom) throws IOException {
-    if (!allInputs.containsKey(fileToAccess)) {
+  public void copyInputFile(Path from, Path to) throws IOException {
+    checkFileIsInput("copyInputFile()", from);
+    FileAccessUtils.moveFile(from, to);
+  }
+
+  public void moveInputFile(Path from, Path to) throws IOException {
+    checkFileIsInput("moveInputFile()", from);
+    FileAccessUtils.moveFile(from, to);
+  }
+
+  public void deleteInputFileIfExists(Path fileToDelete) throws IOException {
+    checkFileIsInput("deleteInputFile()", fileToDelete);
+    FileAccessUtils.deleteFileIfExists(fileToDelete);
+  }
+
+  private void checkFileIsInput(String operation, Path file) {
+    if (!allInputs.containsKey(file)) {
       throw new IllegalArgumentException(
-          "accessFileFrom() called on non-input non-argsfile file: " + fileToAccess);
+          operation + " called on non-input file: " + file);
     }
-    FileAccessUtils.copyFile(fileToAccess, accessFrom);
   }
 
   public ByteString digestFor(Path inputPath) {
