@@ -17,6 +17,7 @@ import persistent.bazel.client.WorkerKey;
 
 public class Keymaker {
 
+  // Constructs a key with its worker tool input files being relative paths
   public static WorkerKey make(
       Path opRoot,
       ImmutableList<String> workerInitCmd,

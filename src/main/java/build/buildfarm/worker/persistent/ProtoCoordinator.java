@@ -11,8 +11,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 import com.google.protobuf.Duration;
@@ -104,6 +102,17 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
     }
   }
 
+  public void ensureWorkerKeyToolInputs(WorkerKey key, WorkerInputs workerFiles) throws IOException {
+    //// Move tool inputs as needed
+    Path workToolRoot = key.getExecRoot().resolve(PersistentWorker.TOOL_INPUT_SUBDIR);
+    for (Path opToolPath : workerFiles.opToolInputs) {
+      Path workToolPath = workerFiles.relativizeInput(workToolRoot, opToolPath);
+      if (!Files.exists(workToolPath)) {
+        workerFiles.moveInputFile(opToolPath, workToolPath);
+      }
+    }
+  }
+
   // For now, we assume that each operation corresponds to a unique worker
   @Override
   public WorkRequest preWorkInit(
@@ -121,9 +130,83 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
 
     startTimeoutTimer(request);
 
-    copyInputs(request.workerInputs, worker.getExecRoot());
+    moveInputs(request.workerInputs, worker.getExecRoot());
 
     return request.request;
+  }
+
+  // After the worker has finished, we need to copy output files back to the operation directory
+  @Override
+  public ResponseCtx postWorkCleanup(
+      WorkResponse response, PersistentWorker worker, RequestCtx request
+  ) throws IOException {
+
+    pendingReqs.remove(request);
+
+    if (response.getExitCode() == 0) {
+      try {
+        Path workerExecRoot = worker.getExecRoot();
+        moveOutputsToOperationRoot(request.filesContext, workerExecRoot);
+        cleanUpNontoolInputs(request.workerInputs, workerExecRoot);
+      } catch (IOException e) {
+        throw logBadCleanup(request, e);
+      }
+    }
+
+    return new ResponseCtx(response, worker.flushStdErr());
+  }
+
+  private IOException logBadCleanup(RequestCtx request, IOException e) {
+    WorkFilesContext context = request.filesContext;
+
+    StringBuilder sb = new StringBuilder();
+    // Why is paths empty when files are not?
+    sb.append(
+        "Output files failure debug for request with args<" + request.request.getArgumentsList() + ">:\n");
+    sb.append("getOutputPathsList:\n");
+    sb.append(context.outputPaths);
+    sb.append("getOutputFilesList:\n");
+    sb.append(context.outputFiles);
+    sb.append("getOutputDirectoriesList:\n");
+    sb.append(context.outputDirectories);
+    logger.severe(sb.toString());
+
+    e.printStackTrace();
+    return new IOException("Response was OK but failed on exposeOutputFiles", e);
+  }
+
+  private void moveInputs(WorkerInputs workerInputs, Path workerExecRoot) throws IOException {
+    for (Path opPath : workerInputs.allInputs.keySet()) {
+      Path execPath = workerInputs.relativizeInput(workerExecRoot, opPath);
+      workerInputs.moveInputFile(opPath, execPath);
+    }
+  }
+
+  private void moveOutputsToOperationRoot(WorkFilesContext context, Path workerExecRoot) throws IOException {
+    Path opRoot = context.opRoot;
+
+    // ??? see DockerExecutor::copyOutputsOutOfContainer
+    for (String outputDir : context.outputDirectories) {
+      Path outputDirPath = Paths.get(outputDir);
+      Files.createDirectories(outputDirPath);
+    }
+
+    for (String relOutput : context.outputFiles) {
+      Path relPath = Paths.get(relOutput);
+      Path opOutputPath = opRoot.resolve(relPath);
+      Path execOutputPath = workerExecRoot.resolve(relPath);
+
+      FileAccessUtils.moveFile(execOutputPath, opOutputPath);
+    }
+  }
+
+  private void cleanUpNontoolInputs(WorkerInputs workerInputs, Path workerExecRoot) throws IOException {
+    for (Path opPath : workerInputs.allInputs.keySet()) {
+      if (!workerInputs.allToolInputs.contains(opPath)) {
+        Path execPath = workerInputs.relativizeInput(workerExecRoot, opPath);
+        workerInputs.deleteInputFileIfExists(execPath);
+      }
+    }
   }
 
   private void startTimeoutTimer(RequestCtx request) {
@@ -157,63 +240,6 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
         logger.severe("Tried to invalidate worker for request:\n" + request + "\n\tbut got: " + e + "\n\nCalling worker.destroy() and moving on.");
         worker.destroy();
       }
-    }
-  }
-
-  private void copyInputs(WorkerInputs workerInputs, Path execRoot) throws IOException {
-    StringBuilder sb = new StringBuilder();
-    for (Path opPath : workerInputs.allInputs.keySet()) {
-      Path execPath = workerInputs.relativizeInput(execRoot, opPath);
-      workerInputs.accessFileFrom(opPath, execPath);
-    }
-  }
-
-  // After the worker has finished, we need to copy output files back to the operation directory
-  @Override
-  public ResponseCtx postWorkCleanup(
-      WorkResponse response, PersistentWorker worker, RequestCtx request
-  ) throws IOException {
-
-    pendingReqs.remove(request);
-
-    if (response.getExitCode() == 0) {
-      WorkFilesContext context = request.filesContext;
-      try {
-        exposeOutputFiles(context, worker.getExecRoot());
-      } catch (IOException e) {
-        StringBuilder sb = new StringBuilder();
-        // Why is paths empty when files are not?
-        sb.append(
-            "Output files failure debug for request with args<" + request.request.getArgumentsList() + ">:\n");
-        sb.append("getOutputPathsList:\n");
-        sb.append(context.outputPaths);
-        sb.append("getOutputFilesList:\n");
-        sb.append(context.outputFiles);
-        sb.append("getOutputDirectoriesList:\n");
-        sb.append(context.outputDirectories);
-        logger.severe(sb.toString());
-        throw new IOException("Response was OK but failed on exposeOutputFiles", e);
-      }
-    }
-
-    return new ResponseCtx(response, worker.flushStdErr());
-  }
-
-  private void exposeOutputFiles(WorkFilesContext context, Path workerExecRoot) throws IOException {
-    Path opRoot = context.opRoot;
-
-    // ??? see DockerExecutor::copyOutputsOutOfContainer
-    for (String outputDir : context.outputDirectories) {
-      Path outputDirPath = Paths.get(outputDir);
-      Files.createDirectories(outputDirPath);
-    }
-
-    for (String relOutput : context.outputFiles) {
-      Path relPath = Paths.get(relOutput);
-      Path opOutputPath = opRoot.resolve(relPath);
-      Path execOutputPath = workerExecRoot.resolve(relPath);
-
-      FileAccessUtils.copyFile(execOutputPath, opOutputPath);
     }
   }
 }

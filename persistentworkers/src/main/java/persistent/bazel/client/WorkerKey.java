@@ -36,7 +36,11 @@ public final class WorkerKey {
    * methods.
    */
   private final HashCode workerFilesCombinedHash;
-  /** Worker files with the corresponding hash code. */
+  /** Worker files with the corresponding hash code.
+   *
+   *  These paths should be stable, so use relative paths
+   *  (unless its a universal absolute path like /tmp/my_tools/...)
+   * */
   private final SortedMap<Path, HashCode> workerFilesWithHashes;
   /** If true, the workers run inside a sandbox. */
   private final boolean sandboxed;
