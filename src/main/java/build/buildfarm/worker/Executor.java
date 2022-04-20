@@ -431,6 +431,17 @@ class Executor {
   )
       throws IOException, InterruptedException {
 
+    boolean useCo = !limits.persistentWorkerKey.isEmpty();
+
+    boolean usePersistentWorker = !limits.persistentWorkerKey.isEmpty();
+
+    String executionStrategy = "default";
+    if (usePersistentWorker) {
+      executionStrategy = "persistent_worker";
+    } else if (limits.containerSettings.enabled) {
+      executionStrategy = "docker";
+    }
+
     StringBuilder sb = new StringBuilder();
     sb.append("======<");
     sb.append("Calling executeCommand with:");
@@ -440,6 +451,7 @@ class Executor {
     sb.append("environmentVariables=" + ImmutableList.copyOf(environmentVariables));
     sb.append("limits.unusedProperties=" + ImmutableMap.copyOf(limits.unusedProperties));
     sb.append("timeout=" + timeout);
+    sb.append("executionStrategy=" + executionStrategy);
     sb.append("======>");
     logger.fine(sb.toString());
 
@@ -460,18 +472,13 @@ class Executor {
       return ExecutionDebugger.performBeforeExecutionDebug(processBuilder, limits, resultBuilder);
     }
 
-    boolean usePersistentWorker = !limits.persistentWorkerKey.isEmpty();
-
-    // boolean isJavaBuilder = arguments.contains(
-    //     "external/remote_java_tools/java_tools/JavaBuilder_deploy.jar");
-    // boolean isScalac = arguments.size() > 1 && arguments.get(0).endsWith("scalac/scalac");
-    // usePersistentWorker = usePersistentWorker || isJavaBuilder || isScalac;
-
-
     Code statusCode;
     if (usePersistentWorker) {
-      logger.log(Level.FINE, "");
-      logger.log(Level.FINE, "usePersistentWorker; got persistentWorkerCommand of : " + limits.persistentWorkerCommand);
+      logger.log(
+        Level.FINE,
+        "usePersistentWorker; got persistentWorkerCommand of : " +
+          limits.persistentWorkerCommand
+      );
 
       Tree execTree = workerContext.getQueuedOperation(operationContext.queueEntry).getTree();
 
@@ -493,8 +500,6 @@ class Executor {
           resultBuilder
       );
     } else {
-      logger.log(Level.FINE, "don't usePersistentWorker");
-
       // run the action under docker
       if (limits.containerSettings.enabled) {
         DockerClient dockerClient = DockerClientBuilder.getInstance().build();
