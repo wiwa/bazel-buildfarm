@@ -153,7 +153,7 @@ public class PersistentExecutor {
         .setRequestId(0)
         .build();
 
-    RequestCtx requestCtx = new RequestCtx(request, context, workerFiles);
+    RequestCtx requestCtx = new RequestCtx(request, context, workerFiles, timeout);
 
     //// Run request
     //// Required file operations (in/out) are the responsibility of the coordinator
