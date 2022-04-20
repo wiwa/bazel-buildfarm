@@ -15,6 +15,7 @@
 package build.buildfarm.worker;
 
 import java.io.FileInputStream;
+import java.io.InputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -55,6 +56,7 @@ import build.buildfarm.v1test.ExecutingOperationMetadata;
 import build.buildfarm.v1test.ExecutionPolicy;
 import build.buildfarm.v1test.ExecutionWrapper;
 import build.buildfarm.v1test.Tree;
+import build.buildfarm.worker.ExecutionUtils.ProcessExit;
 import build.buildfarm.worker.WorkerContext.IOResource;
 import build.buildfarm.worker.persistent.PersistentExecutor;
 import build.buildfarm.worker.persistent.WorkFilesContext;
@@ -73,7 +75,9 @@ import static com.google.protobuf.util.Durations.fromSeconds;
 import static build.buildfarm.v1test.ExecutionPolicy.PolicyCase.WRAPPER;
 
 class Executor {
-  private static final int INCOMPLETE_EXIT_CODE = -1;
+
+  static final int INCOMPLETE_EXIT_CODE = -1;
+
   private static final Logger logger = Logger.getLogger(Executor.class.getName());
 
   private final WorkerContext workerContext;
@@ -462,6 +466,8 @@ class Executor {
     // boolean isScalac = arguments.size() > 1 && arguments.get(0).endsWith("scalac/scalac");
     // usePersistentWorker = usePersistentWorker || isJavaBuilder || isScalac;
 
+
+    Code statusCode;
     if (usePersistentWorker) {
       logger.log(Level.FINE, "");
       logger.log(Level.FINE, "usePersistentWorker; got persistentWorkerCommand of : " + limits.persistentWorkerCommand);
@@ -475,8 +481,7 @@ class Executor {
           ImmutableList.copyOf(operationContext.command.getOutputFilesList()),
           ImmutableList.copyOf(operationContext.command.getOutputDirectoriesList())
       );
-
-      return PersistentExecutor.runOnPersistentWorker(
+      statusCode = PersistentExecutor.runOnPersistentWorker(
           limits.persistentWorkerCommand,
           filesContext,
           operationName,
@@ -488,154 +493,135 @@ class Executor {
       );
     } else {
       logger.log(Level.FINE, "don't usePersistentWorker");
+
+      // run the action under docker
+      if (limits.containerSettings.enabled) {
+        DockerClient dockerClient = DockerClientBuilder.getInstance().build();
+
+        // create settings
+        DockerExecutorSettings settings = new DockerExecutorSettings();
+        settings.fetchTimeout = Durations.fromMinutes(1);
+        settings.operationContext = operationContext;
+        settings.execDir = execDir;
+        settings.limits = limits;
+        settings.envVars = environment;
+        settings.timeout = timeout;
+        settings.arguments = arguments;
+
+        return DockerExecutor.runActionWithDocker(dockerClient, settings, resultBuilder);
+      }
+
+      statusCode = executeCommandOnSubprocess(
+          processBuilder,
+          operationName,
+          execDir,
+          limits,
+          timeout,
+          resultBuilder
+      );
+    
+    
+
+      // allow debugging after an execution
+      if (limits.debugAfterExecution) {
+        // Obtain execution statistics recorded while the action executed.
+        // Currently we can only source this data when using the sandbox.
+        ExecutionStatistics executionStatistics = ExecutionStatistics.newBuilder().build();
+        if (limits.useLinuxSandbox) {
+          executionStatistics =
+              ExecutionStatistics.newBuilder()
+                  .mergeFrom(
+                      new FileInputStream(execDir.resolve("action_execution_statistics").toString()))
+                  .build();
+        }
+
+        return ExecutionDebugger.performAfterExecutionDebug(
+            processBuilder, exitCode, limits, executionStatistics, resultBuilder);
+      }
     }
 
-    // run the action under docker
-    if (limits.containerSettings.enabled) {
-      DockerClient dockerClient = DockerClientBuilder.getInstance().build();
-
-      // create settings
-      DockerExecutorSettings settings = new DockerExecutorSettings();
-      settings.fetchTimeout = Durations.fromMinutes(1);
-      settings.operationContext = operationContext;
-      settings.execDir = execDir;
-      settings.limits = limits;
-      settings.envVars = environment;
-      settings.timeout = timeout;
-      settings.arguments = arguments;
-
-      return DockerExecutor.runActionWithDocker(dockerClient, settings, resultBuilder);
-    }
-
-    return executeCommandNormally(
-        processBuilder,
-        operationName,
-        execDir,
-        limits,
-        timeout,
-        resultBuilder
-    );
+    return statusCode;
   }
 
-  private Code executeCommandNormally(
-      ProcessBuilder processBuilder,
-      String operationName,
-      Path execDir,
-      ResourceLimits limits,
-      Duration timeout,
-      ActionResult.Builder resultBuilder
-  )
-      throws IOException, InterruptedException {
-
+  private Code executeCommandOnSubprocess(
+    ProcessBuilder processBuilder,
+    String operationName,
+    Path execDir,
+    ResourceLimits limits,
+    Duration timeout,
+    ActionResult.Builder resultBuilder
+  ) throws IOException, InterruptedException {
+    
     final Write stdoutWrite = new NullWrite();
     final Write stderrWrite = new NullWrite();
 
     long startNanoTime = System.nanoTime();
-    Process process;
-    try {
-      process = ProcessUtils.threadSafeStart(processBuilder);
-      process.getOutputStream().close();
-    } catch (IOException e) {
-      logger.log(Level.SEVERE, format("error starting process for %s", operationName), e);
-      // again, should we do something else here??
-      resultBuilder.setExitCode(INCOMPLETE_EXIT_CODE);
-      // The openjdk IOException for an exec failure here includes the working
-      // directory of the execution. Drop it and reconstruct without it if we
-      // can get the cause.
-      Throwable t = e.getCause();
-      String message;
-      if (t != null) {
-        message =
-            "Cannot run program \"" + processBuilder.command().get(0) + "\": " + t.getMessage();
-      } else {
-        message = e.getMessage();
-      }
-      resultBuilder.setStderrRaw(ByteString.copyFromUtf8(message));
-      return Code.INVALID_ARGUMENT;
+    ProcessExit processStart = ExecutionUtils.startSubprocess(processBuilder, operationName, execLock);
+    Process process = processStart.process;
+    
+    if (process == null) {
+      resultBuilder.setExitCode(processStart.exitCode);
+      resultBuilder.setStderrRaw(ByteString.copyFromUtf8(processStart.stderr));
+      return processStart.statusCode;
     }
 
-    // Create threads to extract stdout/stderr from a process.
-    // The readers attach to the process's input/error streams.
-    final Write stdoutWrite = new NullWrite();
-    final Write stderrWrite = new NullWrite();
-    ByteStringWriteReader stdoutReader =
-        new ByteStringWriteReader(
-            process.getInputStream(), stdoutWrite, (int) workerContext.getStandardOutputLimit());
-    ByteStringWriteReader stderrReader =
-        new ByteStringWriteReader(
-            process.getErrorStream(), stderrWrite, (int) workerContext.getStandardErrorLimit());
+    InputReader outReader = startReading(process.getInputStream(), stdoutWrite);
+    InputReader errReader = startReading(process.getErrorStream(), stderrWrite);
+    Thread stdoutReaderThread = outReader.readThread;
+    Thread stderrReaderThread = errReader.readThread;
 
-    Thread stdoutReaderThread = new Thread(stdoutReader);
-    Thread stderrReaderThread = new Thread(stderrReader);
-    stdoutReaderThread.start();
-    stderrReaderThread.start();
+    ExecutionUtils.ProcessExit exitAndStatus = ExecutionUtils.waitForProcess(
+      process,
+      operationName,
+      startNanoTime,
+      timeout
+    );
+    exitCode = exitAndStatus.exitCode;
+    Code statusCode = exitAndStatus.statusCode;
 
-    Code statusCode = Code.OK;
-    boolean processCompleted = false;
-    try {
-      if (timeout == null) {
-        exitCode = process.waitFor();
-        processCompleted = true;
-      } else {
-        long timeoutNanos = timeout.getSeconds() * 1000000000L + timeout.getNanos();
-        long remainingNanoTime = timeoutNanos - (System.nanoTime() - startNanoTime);
-        if (process.waitFor(remainingNanoTime, TimeUnit.NANOSECONDS)) {
-          exitCode = process.exitValue();
-          processCompleted = true;
-        } else {
-          logger.log(
-              Level.INFO,
-              format("process timed out for %s after %ds", operationName, timeout.getSeconds()));
-          statusCode = Code.DEADLINE_EXCEEDED;
-        }
-      }
-    } finally {
-      if (!processCompleted) {
-        process.destroy();
-        int waitMillis = 1000;
-        while (!process.waitFor(waitMillis, TimeUnit.MILLISECONDS)) {
-          logger.log(
-              Level.INFO,
-              format("process did not respond to termination for %s, killing it", operationName));
-          process.destroyForcibly();
-          waitMillis = 100;
-        }
-      }
-    }
+    stdoutReaderThread.join();
+    stderrReaderThread.join();
 
     // Now that the process is completed, extract the final stdout/stderr.
     ByteString stdout = ByteString.EMPTY;
     ByteString stderr = ByteString.EMPTY;
     try {
-      stdoutReaderThread.join();
-      stderrReaderThread.join();
-      stdout = stdoutReader.getData();
-      stderr = stderrReader.getData();
-
-    } catch (Exception e) {
-      logger.log(Level.SEVERE, "error extracting stdout/stderr: ", e.getMessage());
-    }
-
-    resultBuilder.setExitCode(exitCode).setStdoutRaw(stdout).setStderrRaw(stderr);
-
-    // allow debugging after an execution
-    if (limits.debugAfterExecution) {
-      // Obtain execution statistics recorded while the action executed.
-      // Currently we can only source this data when using the sandbox.
-      ExecutionStatistics executionStatistics = ExecutionStatistics.newBuilder().build();
-      if (limits.useLinuxSandbox) {
-        executionStatistics =
-            ExecutionStatistics.newBuilder()
-                .mergeFrom(
-                    new FileInputStream(execDir.resolve("action_execution_statistics").toString()))
-                .build();
+      resultBuilder
+          .setExitCode(exitCode)
+          .setStdoutRaw(outReader.reader.getData())
+          .setStderrRaw(outReader.reader.getData());
+    } catch (IOException e) {
+      if (statusCode != Code.DEADLINE_EXCEEDED) {
+        throw e;
       }
-
-      return ExecutionDebugger.performAfterExecutionDebug(
-          processBuilder, exitCode, limits, executionStatistics, resultBuilder);
+      logger.log(
+          Level.INFO,
+          format("error getting process outputs for %s after timeout", operationName),
+          e);
     }
-
     return statusCode;
+  }
 
+  private static class InputReader {
+    public final Thread readThread;
+
+    public final ByteStringWriteReader reader;
+
+    public InputReader(Thread readThread, ByteStringWriteReader reader) {
+      this.readThread = readThread;
+      this.reader = reader;
+    }
+  }
+
+  private InputReader startReading(InputStream processInputStream, Write writeStream) {
+    writeStream.reset();
+    ByteStringWriteReader processReader =
+        new ByteStringWriteReader(
+          processInputStream, writeStream, (int) workerContext.getStandardOutputLimit());
+
+    Thread processReaderThread = new Thread(processReader);
+    processReaderThread.start();
+
+    return new InputReader(processReaderThread, processReader);
   }
 }
