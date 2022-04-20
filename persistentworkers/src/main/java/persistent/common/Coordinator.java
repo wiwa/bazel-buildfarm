@@ -14,12 +14,13 @@ import persistent.common.CtxAround.Id;
  * @param <W> worker type
  * @param <CI> request with extra context/info
  * @param <CO> response with extra context/info
+ * @param <P> pool type
  */
-public abstract class Coordinator<K, I, O, W extends Worker<I, O>, CI extends CtxAround<I>, CO extends CtxAround<O>> {
+public abstract class Coordinator<K, I, O, W extends Worker<I, O>, CI extends CtxAround<I>, CO extends CtxAround<O>, P extends  ObjectPool<K, W>> {
 
-  protected final ObjectPool<K, W> workerPool;
+  protected final P workerPool;
 
-  public Coordinator(ObjectPool<K, W> workerPool) {
+  public Coordinator(P workerPool) {
     this.workerPool = workerPool;
   }
 
@@ -44,7 +45,7 @@ public abstract class Coordinator<K, I, O, W extends Worker<I, O>, CI extends Ct
     return new SimpleCoordinator<>(workerPool);
   }
 
-  public static class SimpleCoordinator<K, I, O, W extends Worker<I, O>> extends Coordinator<K, I, O, W, Id<I>, Id<O>> {
+  public static class SimpleCoordinator<K, I, O, W extends Worker<I, O>> extends Coordinator<K, I, O, W, Id<I>, Id<O>, ObjectPool<K, W>> {
 
     public SimpleCoordinator(ObjectPool<K, W> workerPool) {
       super(workerPool);

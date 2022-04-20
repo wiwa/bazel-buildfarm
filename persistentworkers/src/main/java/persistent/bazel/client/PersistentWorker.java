@@ -97,6 +97,10 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
     }
   }
 
+  public WorkerKey getKey() {
+    return this.key;
+  }
+
   public ImmutableList<String> getInitCmd() {
     return this.initCmd;
   }
