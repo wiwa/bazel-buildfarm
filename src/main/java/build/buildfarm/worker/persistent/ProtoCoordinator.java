@@ -5,6 +5,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.UUID;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -12,6 +15,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
+import com.google.protobuf.Duration;
 
 import persistent.bazel.client.CommonsWorkerPool;
 import persistent.bazel.client.PersistentWorker;
@@ -31,6 +35,10 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
   private static final Logger logger = Logger.getLogger(ProtoCoordinator.class.getName());
 
   private static final String WORKER_INIT_LOG_SUFFIX = ".initargs.log";
+
+  private static final ConcurrentHashMap<RequestCtx, PersistentWorker> pendingReqs = new ConcurrentHashMap<>();
+
+  private static final Timer timeoutScheduler = new Timer("persistent-worker-timeout", true);
 
   public ProtoCoordinator(CommonsWorkerPool workerPool) {
     super(workerPool);
@@ -102,9 +110,50 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
       WorkerKey key, RequestCtx request, PersistentWorker worker
   ) throws IOException {
 
+    PersistentWorker pendingWorker = pendingReqs.putIfAbsent(request, worker);
+    if (pendingWorker != null) {
+      if (pendingWorker != worker) {
+        throw new IllegalArgumentException("Already have a persistent worker on the job: " + request.request);
+      } else {
+        throw new IllegalArgumentException("Got the same request for the same worker while it's running?!: " + request.request);
+      }
+    }
+
+    startTimeoutTimer(request);
+
     copyInputs(request.workerInputs, worker.getExecRoot());
 
     return request.request;
+  }
+
+  private void startTimeoutTimer(RequestCtx request) {
+    Duration timeout = request.timeout;
+    if (timeout != null) {
+      long timeoutNanos = timeout.getSeconds() * 1000000000L + timeout.getNanos();
+      timeoutScheduler.schedule(new RequestTimeoutHandler(request), timeoutNanos);
+    }
+  }
+
+  private static class RequestTimeoutHandler extends TimerTask {
+
+    private final RequestCtx request;
+
+    private RequestTimeoutHandler(RequestCtx request) {
+      this.request = request;
+    }
+
+    @Override
+    public void run() {
+      PersistentWorker pendingWorker = pendingReqs.get(this.request);
+      if (pendingWorker != null) {
+        onTimeout(this.request, pendingWorker);
+      }
+    }
+  }
+
+  private static void onTimeout(RequestCtx request, PersistentWorker worker) {
+    logger.severe("Persistent Worker timed out on request: " + request.request);
+    worker.destroy();
   }
 
   private void copyInputs(WorkerInputs workerInputs, Path execRoot) throws IOException {
@@ -120,6 +169,9 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
   public ResponseCtx postWorkCleanup(
       WorkResponse response, PersistentWorker worker, RequestCtx request
   ) throws IOException {
+
+    pendingReqs.remove(request);
+
     if (response.getExitCode() == 0) {
       WorkFilesContext context = request.filesContext;
       try {
