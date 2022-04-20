@@ -30,7 +30,7 @@ import static persistent.bazel.client.PersistentWorker.TOOL_INPUT_SUBDIR;
  * 2) pre-request requirements
  * 3) post-response requirements, i.e. putting output files in the right place
  */
-public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
+public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, CommonsWorkerPool> {
 
   private static final Logger logger = Logger.getLogger(ProtoCoordinator.class.getName());
 
@@ -134,7 +134,7 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
     }
   }
 
-  private static class RequestTimeoutHandler extends TimerTask {
+  private class RequestTimeoutHandler extends TimerTask {
 
     private final RequestCtx request;
 
@@ -144,16 +144,20 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx> {
 
     @Override
     public void run() {
-      PersistentWorker pendingWorker = pendingReqs.get(this.request);
-      if (pendingWorker != null) {
-        onTimeout(this.request, pendingWorker);
-      }
+      onTimeout(this.request, pendingReqs.get(this.request));
     }
   }
 
-  private static void onTimeout(RequestCtx request, PersistentWorker worker) {
-    logger.severe("Persistent Worker timed out on request: " + request.request);
-    worker.destroy();
+  private void onTimeout(RequestCtx request, PersistentWorker worker) {
+    if (worker != null) {
+      logger.severe("Persistent Worker timed out on request: " + request.request);
+      try {
+        this.workerPool.invalidateObject(worker.getKey(), worker);
+      } catch (Exception e) {
+        logger.severe("Tried to invalidate worker for request:\n" + request + "\n\tbut got: " + e + "\n\nCalling worker.destroy() and moving on.");
+        worker.destroy();
+      }
+    }
   }
 
   private void copyInputs(WorkerInputs workerInputs, Path execRoot) throws IOException {

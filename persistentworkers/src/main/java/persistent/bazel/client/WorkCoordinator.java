@@ -10,10 +10,10 @@ import persistent.common.ObjectPool;
 /**
  * Fills in the type parameters so that it will be specifically for PersistentWorker
  */
-public abstract class WorkCoordinator<I extends CtxAround<WorkRequest>, O extends CtxAround<WorkResponse>>
-    extends Coordinator<WorkerKey, WorkRequest, WorkResponse, PersistentWorker, I, O> {
+public abstract class WorkCoordinator<I extends CtxAround<WorkRequest>, O extends CtxAround<WorkResponse>, P extends ObjectPool<WorkerKey, PersistentWorker>>
+    extends Coordinator<WorkerKey, WorkRequest, WorkResponse, PersistentWorker, I, O, P> {
 
-  public WorkCoordinator(ObjectPool<WorkerKey, PersistentWorker> workerPool) {
+  public WorkCoordinator(P workerPool) {
     super(workerPool);
   }
 }
