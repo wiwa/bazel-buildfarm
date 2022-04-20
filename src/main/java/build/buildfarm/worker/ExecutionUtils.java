@@ -42,8 +42,10 @@ public class ExecutionUtils {
     Process process = null;
     int exitCode = 0;
     try {
-      synchronized (execLock) {
-        process = processBuilder.start();
+      if (execLock != null) {
+        synchronized (execLock) {
+          process = processBuilder.start();
+        }
       }
       process.getOutputStream().close();
     } catch (IOException e) {

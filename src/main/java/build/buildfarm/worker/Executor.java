@@ -431,8 +431,6 @@ class Executor {
   )
       throws IOException, InterruptedException {
 
-    boolean useCo = !limits.persistentWorkerKey.isEmpty();
-
     boolean usePersistentWorker = !limits.persistentWorkerKey.isEmpty();
 
     String executionStrategy = "default";
