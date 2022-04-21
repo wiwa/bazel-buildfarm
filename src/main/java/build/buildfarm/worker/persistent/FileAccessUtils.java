@@ -23,6 +23,7 @@ public class FileAccessUtils {
 
   /**
    * Copies a file, creating necessary directories, replacing existing files.
+   * The resulting file is set to be writeable, and we throw if we cannot set that.
    * Thread-safe against writes to the same path.
    *
    * @param from
@@ -40,6 +41,10 @@ public class FileAccessUtils {
         () -> {
           try {
             Files.copy(from, absTo, REPLACE_EXISTING, COPY_ATTRIBUTES);
+            boolean writeable = absTo.toFile().setWritable(true);
+            if (!writeable) {
+              return new IOException("copyFile() could not set writeable: " + absTo);
+            }
             return null;
           } catch (IOException e) {
             return e;
@@ -53,8 +58,8 @@ public class FileAccessUtils {
 
   /**
    * Moves a file, creating necessary directories, replacing existing files.
-   * Thread-safe against writes to the same path,
-   *    but may get AccessDeniedException if the file is not writeable.
+   * The resulting file is set to be writeable, and we throw if we cannot set that.
+   * Thread-safe against writes to the same path.
    *
    * @param from
    * @param to
@@ -71,6 +76,10 @@ public class FileAccessUtils {
         () -> {
           try {
             Files.move(from, absTo, REPLACE_EXISTING);
+            boolean writeable = absTo.toFile().setWritable(true);
+            if (!writeable) {
+              return new IOException("moveFile() could not set writeable: " + absTo);
+            }
             return null;
           } catch (IOException e) {
             return e;

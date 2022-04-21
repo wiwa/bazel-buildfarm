@@ -29,7 +29,7 @@ public class PersistentExecutor {
 
   private static final Logger logger = Logger.getLogger(PersistentExecutor.class.getName());
 
-  private static final ProtoCoordinator coordinator = ProtoCoordinator.ofCommonsPool(4);
+  private static final ProtoCoordinator coordinator = ProtoCoordinator.ofCommonsPool(12);
 
   static final Path workRootsDir = Paths.get("/tmp/worker/persistent/");
 
