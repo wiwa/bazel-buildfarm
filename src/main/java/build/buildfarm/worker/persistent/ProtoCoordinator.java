@@ -57,7 +57,7 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
         Path keyExecRoot = workerKey.getExecRoot();
         String workerExecDir = getUniqueSubdir(keyExecRoot);
         Path workerExecRoot = keyExecRoot.resolve(workerExecDir);
-        loadToolsIntoWorkerRoot(workerKey, workerExecRoot);
+        copyToolsIntoWorkerExecRoot(workerKey, workerExecRoot);
 
         Path initArgsLogFile = workerExecRoot.resolve(workerExecDir + WORKER_INIT_LOG_SUFFIX);
         if (!Files.exists(initArgsLogFile)) {
@@ -80,6 +80,17 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
     return new ProtoCoordinator(loadToolsOnCreate, maxWorkersPerKey);
   }
 
+  public void moveToolInputsIntoWorkerToolRoot(WorkerKey key, WorkerInputs workerFiles) throws IOException {
+    //// Move tool inputs as needed
+    Path workToolRoot = key.getExecRoot().resolve(PersistentWorker.TOOL_INPUT_SUBDIR);
+    for (Path opToolPath : workerFiles.opToolInputs) {
+      Path workToolPath = workerFiles.relativizeInput(workToolRoot, opToolPath);
+      if (!Files.exists(workToolPath)) {
+        workerFiles.moveInputFile(opToolPath, workToolPath);
+      }
+    }
+  }
+
   private static String getUniqueSubdir(Path workRoot) {
     String uuid = UUID.randomUUID().toString();
     while (Files.exists(workRoot.resolve(uuid))) {
@@ -88,7 +99,8 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
     return uuid;
   }
 
-  private static void loadToolsIntoWorkerRoot(
+  // moveToolInputsIntoWorkerToolRoot() should have been called before this.
+  private static void copyToolsIntoWorkerExecRoot(
       WorkerKey key, Path workerExecRoot
   ) throws IOException {
     logger.log(Level.FINE, "loadToolsIntoWorkerRoot() into: " + workerExecRoot);
@@ -99,17 +111,6 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
       Path execRootPath = workerExecRoot.resolve(relPath);
 
       FileAccessUtils.copyFile(toolInputPath, execRootPath);
-    }
-  }
-
-  public void ensureWorkerKeyToolInputs(WorkerKey key, WorkerInputs workerFiles) throws IOException {
-    //// Move tool inputs as needed
-    Path workToolRoot = key.getExecRoot().resolve(PersistentWorker.TOOL_INPUT_SUBDIR);
-    for (Path opToolPath : workerFiles.opToolInputs) {
-      Path workToolPath = workerFiles.relativizeInput(workToolRoot, opToolPath);
-      if (!Files.exists(workToolPath)) {
-        workerFiles.moveInputFile(opToolPath, workToolPath);
-      }
     }
   }
 
@@ -127,10 +128,9 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
         throw new IllegalArgumentException("Got the same request for the same worker while it's running?!: " + request.request);
       }
     }
-
     startTimeoutTimer(request);
 
-    moveInputs(request.workerInputs, worker.getExecRoot());
+    linkNontoolInputs(request.workerInputs, worker.getExecRoot());
 
     return request.request;
   }
@@ -142,6 +142,10 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
   ) throws IOException {
 
     pendingReqs.remove(request);
+
+    if (response == null) {
+      throw new RuntimeException("postWorkCleanup: WorkResponse was null!");
+    }
 
     if (response.getExitCode() == 0) {
       try {
@@ -175,10 +179,13 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
     return new IOException("Response was OK but failed on exposeOutputFiles", e);
   }
 
-  private void moveInputs(WorkerInputs workerInputs, Path workerExecRoot) throws IOException {
+  // This should replace any existing symlinks
+  private void linkNontoolInputs(WorkerInputs workerInputs, Path workerExecRoot) throws IOException {
     for (Path opPath : workerInputs.allInputs.keySet()) {
-      Path execPath = workerInputs.relativizeInput(workerExecRoot, opPath);
-      workerInputs.moveInputFile(opPath, execPath);
+      if (!workerInputs.allToolInputs.contains(opPath)) {
+        Path execPath = workerInputs.relativizeInput(workerExecRoot, opPath);
+        workerInputs.linkInputFile(opPath, execPath);
+      }
     }
   }
 
@@ -203,8 +210,7 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
   private void cleanUpNontoolInputs(WorkerInputs workerInputs, Path workerExecRoot) throws IOException {
     for (Path opPath : workerInputs.allInputs.keySet()) {
       if (!workerInputs.allToolInputs.contains(opPath)) {
-        Path execPath = workerInputs.relativizeInput(workerExecRoot, opPath);
-        workerInputs.deleteInputFileIfExists(execPath);
+        workerInputs.deleteInputFileIfExists(workerExecRoot, opPath);
       }
     }
   }

@@ -2,10 +2,8 @@ package build.buildfarm.worker.persistent;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -22,7 +20,6 @@ import com.google.rpc.Code;
 
 import build.bazel.remote.execution.v2.ActionResult;
 import build.buildfarm.worker.resources.ResourceLimits;
-import persistent.bazel.client.PersistentWorker;
 import persistent.bazel.client.WorkerKey;
 
 /**
@@ -121,7 +118,7 @@ public class PersistentExecutor {
         workerFiles
     );
 
-    coordinator.ensureWorkerKeyToolInputs(key, workerFiles);
+    coordinator.moveToolInputsIntoWorkerToolRoot(key, workerFiles);
 
 
     //// Make request
