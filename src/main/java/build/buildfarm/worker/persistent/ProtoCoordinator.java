@@ -38,6 +38,16 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
 
   private static final Timer timeoutScheduler = new Timer("persistent-worker-timeout", true);
 
+  private static final ConcurrentHashMap<WorkerKey, EasyMonitor> toolInputSyncs = new ConcurrentHashMap<>();
+
+  private static EasyMonitor keyLock(WorkerKey key) {
+    return toolInputSyncs.computeIfAbsent(key, k -> new EasyMonitor());
+  }
+
+  private static class EasyMonitor {
+    public EasyMonitor(){}
+  }
+
   public ProtoCoordinator(CommonsWorkerPool workerPool) {
     super(workerPool);
   }
@@ -80,13 +90,20 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
     return new ProtoCoordinator(loadToolsOnCreate, maxWorkersPerKey);
   }
 
-  public void moveToolInputsIntoWorkerToolRoot(WorkerKey key, WorkerInputs workerFiles) throws IOException {
-    //// Move tool inputs as needed
-    Path workToolRoot = key.getExecRoot().resolve(PersistentWorker.TOOL_INPUT_SUBDIR);
-    for (Path opToolPath : workerFiles.opToolInputs) {
-      Path workToolPath = workerFiles.relativizeInput(workToolRoot, opToolPath);
-      if (!Files.exists(workToolPath)) {
-        workerFiles.moveInputFile(opToolPath, workToolPath);
+  public void copyToolInputsIntoWorkerToolRoot(WorkerKey key, WorkerInputs workerFiles) throws IOException {
+    EasyMonitor lock = keyLock(key);
+    synchronized (lock) {
+      try {
+        //// Move tool inputs as needed
+        Path workToolRoot = key.getExecRoot().resolve(PersistentWorker.TOOL_INPUT_SUBDIR);
+        for (Path opToolPath : workerFiles.opToolInputs) {
+          Path workToolPath = workerFiles.relativizeInput(workToolRoot, opToolPath);
+          if (!Files.exists(workToolPath)) {
+            workerFiles.copyInputFile(opToolPath, workToolPath);
+          }
+        }
+      } finally {
+        toolInputSyncs.remove(key);
       }
     }
   }

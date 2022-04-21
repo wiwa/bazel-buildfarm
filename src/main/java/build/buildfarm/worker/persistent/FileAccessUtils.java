@@ -53,7 +53,8 @@ public class FileAccessUtils {
 
   /**
    * Moves a file, creating necessary directories, replacing existing files.
-   * Thread-safe against writes to the same path.
+   * Thread-safe against writes to the same path,
+   *    but may get AccessDeniedException if the file is not writeable.
    *
    * @param from
    * @param to
