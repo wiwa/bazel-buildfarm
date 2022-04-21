@@ -71,9 +71,15 @@ public class WorkerInputs {
     FileAccessUtils.moveFile(from, to);
   }
 
-  public void deleteInputFileIfExists(Path fileToDelete) throws IOException {
-    checkFileIsInput("deleteInputFile()", fileToDelete);
-    FileAccessUtils.deleteFileIfExists(fileToDelete);
+  public void linkInputFile(Path from, Path to) throws IOException {
+    checkFileIsInput("linkInputFile()", from);
+    FileAccessUtils.linkFile(from, to);
+  }
+
+  public void deleteInputFileIfExists(Path workerExecRoot, Path opPathInput) throws IOException {
+    checkFileIsInput("deleteInputFile()", opPathInput);
+    Path execPathInput = relativizeInput(workerExecRoot, opPathInput);
+    FileAccessUtils.deleteFileIfExists(execPathInput);
   }
 
   private void checkFileIsInput(String operation, Path file) {
