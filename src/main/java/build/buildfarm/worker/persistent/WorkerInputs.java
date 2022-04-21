@@ -63,7 +63,7 @@ public class WorkerInputs {
 
   public void copyInputFile(Path from, Path to) throws IOException {
     checkFileIsInput("copyInputFile()", from);
-    FileAccessUtils.moveFile(from, to);
+    FileAccessUtils.copyFile(from, to);
   }
 
   public void moveInputFile(Path from, Path to) throws IOException {

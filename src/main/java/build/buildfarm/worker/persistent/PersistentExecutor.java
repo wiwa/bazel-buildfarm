@@ -118,7 +118,7 @@ public class PersistentExecutor {
         workerFiles
     );
 
-    coordinator.moveToolInputsIntoWorkerToolRoot(key, workerFiles);
+    coordinator.copyToolInputsIntoWorkerToolRoot(key, workerFiles);
 
 
     //// Make request
