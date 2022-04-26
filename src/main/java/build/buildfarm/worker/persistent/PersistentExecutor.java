@@ -29,7 +29,9 @@ public class PersistentExecutor {
 
   private static final Logger logger = Logger.getLogger(PersistentExecutor.class.getName());
 
-  private static final ProtoCoordinator coordinator = ProtoCoordinator.ofCommonsPool(12);
+  private static final int defaultMaxWorkersPerKey = 6;
+
+  private static final ProtoCoordinator coordinator = ProtoCoordinator.ofCommonsPool(getMaxWorkersPerKey());
 
   static final Path workRootsDir = Paths.get("/tmp/worker/persistent/");
 
@@ -39,6 +41,17 @@ public class PersistentExecutor {
 
   private static final String SCALAC_EXEC_NAME = "Scalac";
   private static final String JAVAC_EXEC_NAME = "JavaBuilder";
+
+  private static int getMaxWorkersPerKey() {
+    try {
+      return Integer.parseInt(System.getenv("BUILDFARM_MAX_WORKERS_PER_KEY"));
+    } catch(Exception ignored) {
+      logger.info(
+          "Could not get env var BUILDFARM_MAX_WORKERS_PER_KEY; defaulting to " + defaultMaxWorkersPerKey
+      );
+    }
+    return defaultMaxWorkersPerKey;
+  }
 
   /**
    * 1) Parse tool inputs and request inputs
