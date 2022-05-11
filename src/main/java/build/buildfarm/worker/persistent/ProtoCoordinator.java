@@ -147,7 +147,7 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
     }
     startTimeoutTimer(request);
 
-    linkNontoolInputs(request.workerInputs, worker.getExecRoot());
+    copyNontoolInputs(request.workerInputs, worker.getExecRoot());
 
     return request.request;
   }
@@ -202,6 +202,15 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
       if (!workerInputs.allToolInputs.contains(opPath)) {
         Path execPath = workerInputs.relativizeInput(workerExecRoot, opPath);
         workerInputs.linkInputFile(opPath, execPath);
+      }
+    }
+  }
+
+  private void copyNontoolInputs(WorkerInputs workerInputs, Path workerExecRoot) throws IOException {
+    for (Path opPath : workerInputs.allInputs.keySet()) {
+      if (!workerInputs.allToolInputs.contains(opPath)) {
+        Path execPath = workerInputs.relativizeInput(workerExecRoot, opPath);
+        workerInputs.copyInputFile(opPath, execPath);
       }
     }
   }
