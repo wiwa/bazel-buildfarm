@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.function.Supplier;
+import java.util.logging.Logger;
 
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
@@ -24,6 +25,8 @@ import persistent.common.processes.ProcessWrapper;
  *  Presumably, it is closed (as per tests).
  */
 public class ProtoWorkerRW {
+
+  private final Logger logger = Logger.getLogger(ProcessWrapper.class.getName());
 
   private final ProcessWrapper processWrapper;
 
@@ -55,7 +58,8 @@ public class ProtoWorkerRW {
         if (processWrapper.isAlive() && readStream.available() > 0) {
           stdOut = IOUtils.toString(readStream, StandardCharsets.UTF_8);
         } else {
-          stdOut = "no stream available";
+          stdOut = "no stream available" + "\n" + processWrapper.getWorkRoot();
+          logger.warning(stdOut);
         }
       } catch (IOException e2) {
         stdOut = "Exception trying to read stdout: " + e2;
