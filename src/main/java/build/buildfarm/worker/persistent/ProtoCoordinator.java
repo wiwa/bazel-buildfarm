@@ -241,6 +241,7 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
     }
   }
 
+  // TODO: currently useless since we get interrupted by a Deadline that starts ticking before us
   private void startTimeoutTimer(RequestCtx request) {
     Duration timeout = request.timeout;
     if (timeout != null) {

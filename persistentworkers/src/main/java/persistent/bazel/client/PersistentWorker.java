@@ -64,6 +64,7 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
   @Override
   public WorkResponse doWork(WorkRequest request) {
     WorkResponse response = null;
+    String extraLog = "";
     try {
       logRequest(request);
 
@@ -71,12 +72,20 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
       response = workerRW.waitAndRead();
 
       logIfBadResponse(response);
-    } catch (IOException e) {
+    } catch (IOException | InterruptedException e) {
       e.printStackTrace();
-      logger.severe("IO Failing with : " + e.getMessage());
+      extraLog = "IO Failing with : " + e.getMessage();
+      logger.severe(extraLog);
     } catch (Exception e) {
       e.printStackTrace();
-      logger.severe("Failing with : " + e.getMessage());
+      extraLog = "Failing with : " + e.getMessage();
+      logger.severe(extraLog);
+    }
+    if (!extraLog.isEmpty()) {
+      if (response == null) {
+        throw new NullPointerException(extraLog);
+      }
+      throw new RuntimeException(extraLog);
     }
     return response;
   }
@@ -119,6 +128,15 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
   }
 
   private void logIfBadResponse(WorkResponse response) throws IOException {
+    if (response == null) {
+      StringBuilder sb = new StringBuilder();
+      sb.append("logBadResponse(err)");
+      sb.append("\nWorkResponse is null:");
+      sb.append("\n\tProcess stderr:\n\t");
+      String stderr = workerRW.getProcessWrapper().getErrorString();
+      sb.append(stderr);
+      throw new IOException(sb.toString());
+    }
     int returnCode = response.getExitCode();
     if (returnCode != 0) {
       StringBuilder sb = new StringBuilder();
@@ -130,7 +148,7 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
       sb.append("\n\tProcess stderr: ");
       String stderr = workerRW.getProcessWrapper().getErrorString();
       sb.append(stderr);
-      logger.log(Level.SEVERE, sb.toString());
+      logger.severe(sb.toString());
 
       // // TODO might be able to remove this; scared that stdout might crash.
       // StringBuilder sb2 = new StringBuilder();
