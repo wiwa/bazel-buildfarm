@@ -30,7 +30,8 @@ public interface Gencache {
 
 //    import redis.clients.jedis.JedisCluster
   }
-  interface Jedis {
+  interface Jedis extends Closeable {
+    void close();
 
     Client getClient();
 
@@ -55,5 +56,9 @@ public interface Gencache {
     List<T> getResult();
 
     String getCursor();
+  }
+
+  interface ProvisionedRedisQueue {
+
   }
 }
