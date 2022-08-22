@@ -19,6 +19,9 @@ import java.util.Set;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
+import build.buildfarm.common.gencache.Gencache;
+import build.buildfarm.common.gencache.Gencache.*;
+
 /**
  * @class WorkerIndexer
  * @brief Handle the reindexing the CAS entries based on a departing worker.
