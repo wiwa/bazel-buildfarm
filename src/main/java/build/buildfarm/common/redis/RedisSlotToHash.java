@@ -21,6 +21,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import redis.clients.jedis.util.JedisClusterCRC16;
+
 /**
  * @class RedisSlotToHash
  * @brief Get a redis hash tag for the provided slot number.
