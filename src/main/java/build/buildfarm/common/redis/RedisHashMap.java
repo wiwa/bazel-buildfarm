@@ -16,6 +16,7 @@ package build.buildfarm.common.redis;
 
 import java.util.Map;
 import java.util.Set;
+import build.buildfarm.common.gencache.Gencache.*;
 
 /**
  * @class RedisHashMap

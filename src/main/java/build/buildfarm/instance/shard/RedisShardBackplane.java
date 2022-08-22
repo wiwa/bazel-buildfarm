@@ -14,8 +14,45 @@
 
 package build.buildfarm.instance.shard;
 
-import static java.lang.String.format;
-import static redis.clients.jedis.ScanParams.SCAN_POINTER_START;
+import java.io.IOException;
+import java.time.Instant;
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import javax.annotation.Nullable;
+import javax.naming.ConfigurationException;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Maps;
+import com.google.common.collect.MultimapBuilder;
+import com.google.common.collect.Multimaps;
+import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.longrunning.Operation;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.Timestamp;
+import com.google.protobuf.util.JsonFormat;
+import com.google.protobuf.util.Timestamps;
+import com.google.rpc.Code;
+import com.google.rpc.PreconditionFailure;
+import com.google.rpc.Status;
 
 import build.bazel.remote.execution.v2.ActionResult;
 import build.bazel.remote.execution.v2.Digest;
@@ -53,44 +90,10 @@ import build.buildfarm.v1test.QueuedOperationMetadata;
 import build.buildfarm.v1test.RedisShardBackplaneConfig;
 import build.buildfarm.v1test.ShardWorker;
 import build.buildfarm.v1test.WorkerChange;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ListMultimap;
-import com.google.common.collect.Maps;
-import com.google.common.collect.MultimapBuilder;
-import com.google.common.collect.Multimaps;
-import com.google.common.collect.Sets;
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.longrunning.Operation;
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.Timestamp;
-import com.google.protobuf.util.JsonFormat;
-import com.google.protobuf.util.Timestamps;
-import com.google.rpc.Code;
-import com.google.rpc.PreconditionFailure;
-import com.google.rpc.Status;
-import java.io.IOException;
-import java.time.Instant;
-import java.util.AbstractMap;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-import javax.annotation.Nullable;
-import javax.naming.ConfigurationException;
+
+import static java.lang.String.format;
+
+import static redis.clients.jedis.ScanParams.SCAN_POINTER_START;
 
 public class RedisShardBackplane implements Backplane {
   private static final Logger logger = Logger.getLogger(RedisShardBackplane.class.getName());
@@ -141,7 +144,7 @@ public class RedisShardBackplane implements Backplane {
   private final Set<String> workerSet = Collections.synchronizedSet(new HashSet<>());
   private long workerSetExpiresAt = 0;
 
-  private RedisDistributedState state = new RedisDistributedState();
+  private DistributedState state = new DistributedState();
 
   public RedisShardBackplane(
       RedisShardBackplaneConfig config,

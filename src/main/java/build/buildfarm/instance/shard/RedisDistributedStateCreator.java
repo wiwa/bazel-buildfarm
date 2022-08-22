@@ -35,9 +35,9 @@ import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
 
 public class RedisDistributedStateCreator {
-  public static RedisDistributedState create(RedisClient client, RedisShardBackplaneConfig config)
+  public static DistributedState create(RedisClient client, RedisShardBackplaneConfig config)
       throws IOException {
-    RedisDistributedState state = new RedisDistributedState();
+    DistributedState state = new DistributedState();
 
     // Create containers that make up the backplane
     state.casWorkerMap = createCasWorkerMap(config);

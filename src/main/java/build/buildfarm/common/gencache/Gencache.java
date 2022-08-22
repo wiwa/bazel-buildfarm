@@ -9,8 +9,6 @@ import com.google.common.collect.SetMultimap;
 
 import org.apache.commons.pool2.impl.GenericObjectPool;
 
-import build.buildfarm.common.redis.BalancedRedisQueue;
-
 public interface Gencache {
 
   abstract class Pool<T> implements Closeable {
@@ -24,19 +22,34 @@ public interface Gencache {
 
     Map<String, Pool<Jedis>> getClusterNodes();
 
-    Set<String> hkeys(final String key);
-
-    Set<String> smembers(final String key);
+    String get(final String key);
 
     Long del(final String key);
 
+    Set<String> smembers(final String key);
     Long sadd(final String key, final String... member);
+
+    Set<String> hkeys(final String key);
 
     Map<String, String> hgetAll(final String key);
 
-    String get(final String key);
+    Long hset(final String key, final String field, final String value);
 
+    Long hsetnx(final String key, final String field, final String value);
+
+    Boolean hexists(final String key, final String field);
+
+    Long hdel(final String key, final String... field);
+
+    JedisClusterPipeline pipelined();
+
+    Long hlen(final String key);
 //    import redis.clients.jedis.JedisCluster
+  }
+  interface JedisClusterPipeline {
+    Long hdel(final String key, final String... field);
+
+    void sync();
   }
   interface Jedis extends Closeable {
     void close();
@@ -53,11 +66,13 @@ public interface Gencache {
 
   }
 
-  interface ScanParams {
+  public abstract class ScanParams {
 
-    ScanParams match(String query);
+    public static final String SCAN_POINTER_START = String.valueOf(0);
 
-    ScanParams count(int amount);
+    public abstract ScanParams match(String query);
+
+    public abstract ScanParams count(int amount);
   }
 
   interface ScanResult<T> {
