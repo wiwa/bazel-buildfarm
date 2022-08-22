@@ -32,6 +32,8 @@ public interface Gencache {
 
     Long sadd(final String key, final String... member);
 
+    Map<String, String> hgetAll(final String key);
+
 //    import redis.clients.jedis.JedisCluster
   }
   interface Jedis extends Closeable {
