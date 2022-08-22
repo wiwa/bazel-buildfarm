@@ -23,7 +23,7 @@ public class CasIndexResults {
   /**
    * @field removedHosts
    * @brief The number of CAS entries the worker was removed from.
-   * @details This indicates how much CAS data the shard new the worker had.
+   * @details This indicates how much CAS data the shard knew the worker had.
    */
   public long removedHosts = 0;
 

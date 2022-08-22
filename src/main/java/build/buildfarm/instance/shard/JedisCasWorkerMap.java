@@ -22,7 +22,6 @@ import com.google.common.collect.ImmutableMap;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
-import redis.clients.jedis.JedisClusterPipeline;
 
 /**
  * @class JedisCasWorkerMap

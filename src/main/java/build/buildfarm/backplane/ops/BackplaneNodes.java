@@ -3,6 +3,7 @@ package build.buildfarm.backplane.ops;
 import java.io.IOException;
 import java.util.Set;
 
+import build.buildfarm.common.CasIndexResults;
 import build.buildfarm.v1test.ShardWorker;
 
 public interface BackplaneNodes {
@@ -17,7 +18,13 @@ public interface BackplaneNodes {
    */
   boolean removeWorker(String workerName, String reason) throws IOException;
 
-  void deregisterWorker(String hostName) throws IOException;
+  // !!!? Why doesn't this get called when removeWorker is called?
+  CasIndexResults reindexCas() throws IOException;
+
+  // !!!x
+  default boolean deregisterWorker(String workerName) throws IOException {
+    return this.removeWorker(workerName, "Requested shutdown");
+  }
 
   /** Returns a set of the names of all active workers. */
   Set<String> getWorkers() throws IOException;

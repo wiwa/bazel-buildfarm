@@ -19,7 +19,7 @@ package build.buildfarm.common.redis;
  * @brief A redis queue factory.
  */
 public class RedisQueueFactory {
-  public QueueInterface getQueue(String queueType, String name) {
+  public RedisQueueInterface getQueue(String queueType, String name) {
     if (queueType == null) {
       return null;
     }

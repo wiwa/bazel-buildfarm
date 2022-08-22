@@ -17,11 +17,6 @@ package build.buildfarm.common.redis;
 import com.google.common.collect.ImmutableList;
 import java.util.List;
 import java.util.Map;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisCluster;
-import redis.clients.jedis.JedisPool;
-import redis.clients.jedis.exceptions.JedisException;
-import redis.clients.jedis.exceptions.JedisNoReachableClusterNodeException;
 
 /**
  * @class RedisNodeHashes

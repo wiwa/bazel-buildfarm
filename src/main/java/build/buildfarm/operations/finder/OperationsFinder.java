@@ -22,10 +22,6 @@ import com.jayway.jsonpath.JsonPath;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisCluster;
-import redis.clients.jedis.ScanParams;
-import redis.clients.jedis.ScanResult;
 
 /**
  * @class OperationsFinder

@@ -24,7 +24,6 @@ import com.google.common.collect.LinkedHashMultimap;
 import com.google.common.collect.SetMultimap;
 import java.util.ArrayList;
 import java.util.List;
-import redis.clients.jedis.JedisCluster;
 
 /**
  * @class OperationQueue

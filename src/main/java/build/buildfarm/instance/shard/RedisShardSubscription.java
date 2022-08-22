@@ -24,8 +24,6 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import redis.clients.jedis.JedisCluster;
-import redis.clients.jedis.JedisPubSub;
 
 class RedisShardSubscription implements Runnable {
   private static final Logger logger = Logger.getLogger(RedisShardSubscription.class.getName());

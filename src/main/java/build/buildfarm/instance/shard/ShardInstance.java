@@ -1811,6 +1811,7 @@ public class ShardInstance extends AbstractServerInstance {
 
       String operationName = createOperationName(UUID.randomUUID().toString());
 
+      // !!!? why...? at this point, we've just started processing the ExecuteRequest
       executionSuccess.inc();
       logger.log(
           Level.FINE,

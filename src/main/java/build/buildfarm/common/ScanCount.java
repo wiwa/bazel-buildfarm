@@ -16,10 +16,6 @@ package build.buildfarm.common;
 
 import com.google.common.collect.Sets;
 import java.util.Set;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisCluster;
-import redis.clients.jedis.ScanParams;
-import redis.clients.jedis.ScanResult;
 
 /**
  * @class ScanCount

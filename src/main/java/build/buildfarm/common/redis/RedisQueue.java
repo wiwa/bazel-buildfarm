@@ -16,7 +16,6 @@ package build.buildfarm.common.redis;
 
 import build.buildfarm.common.StringVisitor;
 import java.util.List;
-import redis.clients.jedis.JedisCluster;
 
 /**
  * @class RedisQueue
@@ -27,7 +26,7 @@ import redis.clients.jedis.JedisCluster;
  *     Therefore, two redis queues with the same name, would in fact be the same underlying redis
  *     queue.
  */
-public class RedisQueue extends QueueInterface {
+public class RedisQueue extends RedisQueueInterface {
   /**
    * @field name
    * @brief The unique name of the queue.
@@ -100,7 +99,7 @@ public class RedisQueue extends QueueInterface {
    */
   public String dequeue(JedisCluster jedis, int timeout_s) throws InterruptedException {
     for (int i = 0; i < timeout_s; ++i) {
-      String val = jedis.brpoplpush(name, getDequeueName(), 1);
+      String val = jedis.brpoplpush(name, getDequeueName(), timeout_s);
       if (val != null) {
         return val;
       }

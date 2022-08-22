@@ -48,7 +48,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import javax.naming.ConfigurationException;
-import redis.clients.jedis.JedisCluster;
 
 class WorkerProfile {
   private static ManagedChannel createChannel(String target) {

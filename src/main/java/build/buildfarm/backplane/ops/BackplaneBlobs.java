@@ -5,11 +5,8 @@ import java.util.Map;
 import java.util.Set;
 
 import build.bazel.remote.execution.v2.Digest;
-import build.buildfarm.common.CasIndexResults;
 
 public interface BackplaneBlobs {
-
-  CasIndexResults reindexCas() throws IOException;
 
   /**
    * The CAS is represented as a map where the key is the digest of the blob that is being stored
@@ -19,7 +16,9 @@ public interface BackplaneBlobs {
    */
   void addBlobLocation(Digest blobDigest, String workerName) throws IOException;
 
-  /** Remove or add workers to a blob's location set as requested */
+  /**
+   * Remove or add workers to a blob's location set as requested
+   */
   void adjustBlobLocations(Digest blobDigest, Set<String> addWorkers, Set<String> removeWorkers)
       throws IOException;
 

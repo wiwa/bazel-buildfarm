@@ -36,8 +36,6 @@ import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import redis.clients.jedis.Client;
-import redis.clients.jedis.JedisPubSub;
 
 class RedisShardSubscriber extends JedisPubSub {
   private static final Logger logger = Logger.getLogger(RedisShardSubscriber.class.getName());

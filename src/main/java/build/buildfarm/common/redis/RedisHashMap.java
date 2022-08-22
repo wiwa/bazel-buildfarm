@@ -16,8 +16,6 @@ package build.buildfarm.common.redis;
 
 import java.util.Map;
 import java.util.Set;
-import redis.clients.jedis.JedisCluster;
-import redis.clients.jedis.JedisClusterPipeline;
 
 /**
  * @class RedisHashMap

@@ -15,8 +15,6 @@
 package build.buildfarm.common.redis;
 
 import build.buildfarm.common.ScanCount;
-import redis.clients.jedis.JedisCluster;
-import redis.clients.jedis.JedisClusterPipeline;
 
 /**
  * @class RedisMap

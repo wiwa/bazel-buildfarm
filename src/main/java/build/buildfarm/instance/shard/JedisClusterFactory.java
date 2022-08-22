@@ -22,13 +22,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
 import javax.naming.ConfigurationException;
-import redis.clients.jedis.HostAndPort;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisCluster;
-import redis.clients.jedis.JedisPool;
-import redis.clients.jedis.JedisPoolConfig;
-import redis.clients.jedis.ScanParams;
-import redis.clients.jedis.ScanResult;
 
 /**
  * @class JedisClusterFactory

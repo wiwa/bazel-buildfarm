@@ -1,9 +1,7 @@
 package build.buildfarm.backplane.ops;
 
 import java.io.IOException;
-import java.util.List;
 
-import build.bazel.remote.execution.v2.Platform;
 import build.buildfarm.common.function.InterruptingRunnable;
 import build.buildfarm.v1test.BackplaneStatus;
 import build.buildfarm.v1test.GetClientStartTimeRequest;
