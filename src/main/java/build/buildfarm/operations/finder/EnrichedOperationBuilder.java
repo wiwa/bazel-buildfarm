@@ -32,6 +32,7 @@ import com.google.protobuf.util.JsonFormat;
 import com.google.rpc.PreconditionFailure;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import build.buildfarm.common.gencache.Gencache.*;
 
 /**
  * @class EnrichedOperationBuilder

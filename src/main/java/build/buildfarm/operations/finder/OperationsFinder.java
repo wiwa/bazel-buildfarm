@@ -22,6 +22,7 @@ import com.jayway.jsonpath.JsonPath;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import build.buildfarm.common.gencache.Gencache.*;
 
 /**
  * @class OperationsFinder
