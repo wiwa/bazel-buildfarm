@@ -15,6 +15,7 @@
 package build.buildfarm.common.redis;
 
 import build.buildfarm.common.StringVisitor;
+import build.buildfarm.common.gencache.RedisHashtags;
 import build.buildfarm.v1test.QueueStatus;
 import java.util.ArrayList;
 import java.util.Collections;

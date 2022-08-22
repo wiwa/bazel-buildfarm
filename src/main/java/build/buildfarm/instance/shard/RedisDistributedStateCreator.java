@@ -19,7 +19,7 @@ import build.buildfarm.common.redis.BalancedRedisQueue;
 import build.buildfarm.common.redis.ProvisionedRedisQueue;
 import build.buildfarm.common.redis.RedisClient;
 import build.buildfarm.common.redis.RedisHashMap;
-import build.buildfarm.common.redis.RedisHashtags;
+import build.buildfarm.common.gencache.RedisHashtags;
 import build.buildfarm.common.redis.RedisMap;
 import build.buildfarm.common.redis.RedisNodeHashes;
 import build.buildfarm.v1test.ProvisionedQueue;

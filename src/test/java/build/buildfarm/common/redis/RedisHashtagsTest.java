@@ -20,6 +20,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
+import build.buildfarm.common.gencache.RedisHashtags;
+
 /**
  * @class RedisHashtagsTest
  * @brief tests String utilities when dealing with key names that involve hashtags.

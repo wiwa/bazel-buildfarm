@@ -24,7 +24,11 @@ public interface Gencache {
 
     String get(final String key);
 
+    String setex(final String key, final int seconds, final String value);
+
     Long del(final String key);
+
+    Boolean exists(final String key);
 
     Set<String> smembers(final String key);
     Long sadd(final String key, final String... member);
@@ -47,6 +51,8 @@ public interface Gencache {
 //    import redis.clients.jedis.JedisCluster
   }
   interface JedisClusterPipeline {
+    Long del(final String key);
+
     Long hdel(final String key, final String... field);
 
     void sync();

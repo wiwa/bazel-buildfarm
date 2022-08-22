@@ -15,6 +15,8 @@
 package build.buildfarm.common.redis;
 
 import build.buildfarm.common.StringVisitor;
+import build.buildfarm.common.gencache.Timestamp;
+
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;

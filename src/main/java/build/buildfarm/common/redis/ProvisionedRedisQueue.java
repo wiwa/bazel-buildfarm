@@ -16,6 +16,9 @@ package build.buildfarm.common.redis;
 
 import build.buildfarm.common.ExecutionProperties;
 import build.buildfarm.common.MapUtils;
+import build.buildfarm.common.gencache.EligibilityResult;
+import build.buildfarm.common.gencache.FilteredProvisions;
+
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSetMultimap;
 import com.google.common.collect.SetMultimap;

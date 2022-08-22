@@ -21,6 +21,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import build.buildfarm.common.StringVisitor;
+import build.buildfarm.common.gencache.Timestamp;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
