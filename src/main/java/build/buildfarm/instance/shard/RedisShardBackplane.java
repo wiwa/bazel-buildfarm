@@ -141,7 +141,7 @@ public class RedisShardBackplane implements Backplane {
   private final Set<String> workerSet = Collections.synchronizedSet(new HashSet<>());
   private long workerSetExpiresAt = 0;
 
-  private DistributedState state = new DistributedState();
+  private RedisDistributedState state = new RedisDistributedState();
 
   public RedisShardBackplane(
       RedisShardBackplaneConfig config,
@@ -508,7 +508,7 @@ public class RedisShardBackplane implements Backplane {
     client = new RedisClient(jedisClusterFactory.get());
 
     // Create containers that make up the backplane
-    state = DistributedStateCreator.create(client, config);
+    state = RedisDistributedStateCreator.create(client, config);
 
     if (config.getSubscribeToBackplane()) {
       startSubscriptionThread();

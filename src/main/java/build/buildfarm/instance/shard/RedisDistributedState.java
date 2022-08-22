@@ -25,7 +25,7 @@ import build.buildfarm.common.redis.RedisMap;
  * @details Traditionally redis has been chosen for distributed state management, but alternative
  *     backends can be chosen by choosing customized containers.
  */
-public class DistributedState {
+public class RedisDistributedState {
   /**
    * @field workers
    * @brief All of the workers register themselves to the cluster.

@@ -34,10 +34,10 @@ import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
 
-public class DistributedStateCreator {
-  public static DistributedState create(RedisClient client, RedisShardBackplaneConfig config)
+public class RedisDistributedStateCreator {
+  public static RedisDistributedState create(RedisClient client, RedisShardBackplaneConfig config)
       throws IOException {
-    DistributedState state = new DistributedState();
+    RedisDistributedState state = new RedisDistributedState();
 
     // Create containers that make up the backplane
     state.casWorkerMap = createCasWorkerMap(config);
