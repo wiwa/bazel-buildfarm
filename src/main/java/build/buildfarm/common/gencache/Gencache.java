@@ -5,7 +5,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.google.common.collect.SetMultimap;
+
 import org.apache.commons.pool2.impl.GenericObjectPool;
+
+import build.buildfarm.common.redis.BalancedRedisQueue;
 
 public interface Gencache {
 
@@ -59,6 +63,12 @@ public interface Gencache {
   }
 
   interface ProvisionedRedisQueue {
+
+    BalancedQueue<JedisCluster> queue();
+
+    boolean isEligible(SetMultimap<String, String> properties);
+
+    String explainEligibility(SetMultimap<String, String> properties);
 
   }
 }
