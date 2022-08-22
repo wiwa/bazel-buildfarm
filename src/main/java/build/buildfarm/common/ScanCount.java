@@ -16,6 +16,7 @@ package build.buildfarm.common;
 
 import com.google.common.collect.Sets;
 import java.util.Set;
+import build.buildfarm.common.gencache.Gencache.*;
 
 /**
  * @class ScanCount
