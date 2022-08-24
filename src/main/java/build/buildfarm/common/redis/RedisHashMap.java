@@ -54,7 +54,7 @@ public class RedisHashMap {
    * @return Whether a new key was inserted. If a key is overwritten with a new value, this would be
    *     false.
    */
-  public boolean insert(JedisCluster jedis, String key, String value) {
+  public boolean insert(RedisDriver jedis, String key, String value) {
     return jedis.hset(name, key, value) == 1;
   }
 
@@ -66,7 +66,7 @@ public class RedisHashMap {
    * @param value The value for the key.
    * @return Whether a new key was inserted. If a key already exists, this would be false.
    */
-  public boolean insertIfMissing(JedisCluster jedis, String key, String value) {
+  public boolean insertIfMissing(RedisDriver jedis, String key, String value) {
     return jedis.hsetnx(name, key, value) == 1;
   }
 
@@ -77,7 +77,7 @@ public class RedisHashMap {
    * @param key The name of the key.
    * @return Whether the key exists or not in the map.
    */
-  public boolean exists(JedisCluster jedis, String key) {
+  public boolean exists(RedisDriver jedis, String key) {
     return jedis.hexists(name, key);
   }
 
@@ -88,7 +88,7 @@ public class RedisHashMap {
    * @param key The name of the key.
    * @return Whether the key was removed.
    */
-  public boolean remove(JedisCluster jedis, String key) {
+  public boolean remove(RedisDriver jedis, String key) {
     return jedis.hdel(name, key) == 1;
   }
 
@@ -98,8 +98,8 @@ public class RedisHashMap {
    * @param jedis Jedis cluster client.
    * @param key The names of the keys.
    */
-  public void remove(JedisCluster jedis, Iterable<String> keys) {
-    JedisClusterPipeline p = jedis.pipelined();
+  public void remove(RedisDriver jedis, Iterable<String> keys) {
+    RedisDriverPipeline p = jedis.pipelined();
     for (String key : keys) {
       p.hdel(name, key);
     }
@@ -112,7 +112,7 @@ public class RedisHashMap {
    * @return The size of the map.
    * @note Suggested return identifier: size.
    */
-  public long size(JedisCluster jedis) {
+  public long size(RedisDriver jedis) {
     return jedis.hlen(name);
   }
 
@@ -122,7 +122,7 @@ public class RedisHashMap {
    * @param jedis Jedis cluster client.
    * @return The redis hashmap keys represented as a set.
    */
-  public Set<String> keys(JedisCluster jedis) {
+  public Set<String> keys(RedisDriver jedis) {
     return jedis.hkeys(name);
   }
 
@@ -132,7 +132,7 @@ public class RedisHashMap {
    * @param jedis Jedis cluster client.
    * @return The redis hashmap represented as a java map.
    */
-  public Map<String, String> asMap(JedisCluster jedis) {
+  public Map<String, String> asMap(RedisDriver jedis) {
     return jedis.hgetAll(name);
   }
 }

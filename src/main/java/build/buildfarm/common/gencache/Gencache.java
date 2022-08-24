@@ -18,9 +18,9 @@ public interface Gencache {
     public abstract T getResource();
   }
 
-  interface JedisCluster {
+  interface RedisDriver {
 
-    Map<String, Pool<Jedis>> getClusterNodes();
+    Map<String, Pool<RedisClient>> getClusterNodes();
 
     String get(final String key);
 
@@ -45,19 +45,19 @@ public interface Gencache {
 
     Long hdel(final String key, final String... field);
 
-    JedisClusterPipeline pipelined();
+    RedisDriverPipeline pipelined();
 
     Long hlen(final String key);
-//    import redis.clients.jedis.JedisCluster
   }
-  interface JedisClusterPipeline {
+  interface RedisDriverPipeline {
     Long del(final String key);
 
     Long hdel(final String key, final String... field);
 
     void sync();
   }
-  interface Jedis extends Closeable {
+  interface RedisClient extends Closeable {
+
     void close();
 
     Client getClient();
@@ -72,7 +72,7 @@ public interface Gencache {
 
   }
 
-  public abstract class ScanParams {
+  abstract class ScanParams {
 
     public static final String SCAN_POINTER_START = String.valueOf(0);
 
@@ -89,7 +89,7 @@ public interface Gencache {
 
   interface ProvisionedRedisQueue {
 
-    BalancedQueue<JedisCluster> queue();
+    BalancedQueue queue();
 
     boolean isEligible(SetMultimap<String, String> properties);
 
@@ -97,9 +97,9 @@ public interface Gencache {
 
   }
 
-  interface NodeHashes<T> {
+  interface NodeHashes {
 
-    List<String> getEvenlyDistributedHashesWithPrefix(T jedis, String prefix);
+    List<String> getEvenlyDistributedHashesWithPrefix(RedisDriver redis, String prefix);
   }
 
   interface QueueFactory {

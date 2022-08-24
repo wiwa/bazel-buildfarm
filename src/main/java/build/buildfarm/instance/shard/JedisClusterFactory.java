@@ -41,7 +41,7 @@ public class JedisClusterFactory {
    * @return An established jedis client used to operate on the redis cluster.
    * @note Suggested return identifier: jedis.
    */
-  public static Supplier<Gencache.JedisCluster> create(RedisShardBackplaneConfig config)
+  public static Supplier<Gencache.RedisDriver> create(RedisShardBackplaneConfig config)
       throws ConfigurationException {
     // null password is required to elicit no auth in jedis
     List<String> redisNodes = config.getRedisNodesUrisList();
@@ -170,14 +170,14 @@ public class JedisClusterFactory {
    * @return An established jedis client used to operate on the redis cluster.
    * @note Suggested return identifier: jedis.
    */
-  private static Supplier<Gencache.JedisCluster> createJedisClusterFactory(
+  private static Supplier<Gencache.RedisDriver> createJedisClusterFactory(
       Set<HostAndPort> redisUrisNodes,
       int timeout,
       int maxAttempts,
       String password,
       JedisPoolConfig poolConfig) {
     return () ->
-        new Gencache.JedisCluster(
+        new Gencache.RedisDriver(
             redisUrisNodes,
             /* connectionTimeout=*/ Integer.max(2000, timeout),
             /* soTimeout=*/ Integer.max(2000, timeout),

@@ -42,7 +42,7 @@ public class OperationsFinder {
    * @note Suggested return identifier: results.
    */
   public static FindOperationsResults findOperations(
-      JedisCluster cluster, Instance instance, FindOperationsSettings settings) {
+      RedisDriver cluster, Instance instance, FindOperationsSettings settings) {
     FindOperationsResults results = new FindOperationsResults();
     results.operations = new HashMap<>();
 
@@ -56,7 +56,7 @@ public class OperationsFinder {
         .values()
         .forEach(
             pool -> {
-              try (Jedis node = pool.getResource()) {
+              try (RedisClient node = pool.getResource()) {
                 findOperationNode(cluster, node, instance, settings, results);
               }
             });
@@ -89,8 +89,8 @@ public class OperationsFinder {
    */
   @SuppressWarnings({"unchecked", "rawtypes"})
   private static void findOperationNode(
-      JedisCluster cluster,
-      Jedis node,
+      RedisDriver cluster,
+      RedisClient node,
       Instance instance,
       FindOperationsSettings settings,
       FindOperationsResults results) {
@@ -123,7 +123,7 @@ public class OperationsFinder {
    * @param results Accumulating results from finding operations.
    */
   private static void collectOperations(
-      JedisCluster cluster,
+      RedisDriver cluster,
       Instance instance,
       List<String> operationKeys,
       String filterPredicate,

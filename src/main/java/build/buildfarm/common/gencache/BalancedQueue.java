@@ -1,24 +1,25 @@
 package build.buildfarm.common.gencache;
 
 import build.buildfarm.common.StringVisitor;
+import build.buildfarm.common.gencache.Gencache.RedisDriver;
 import build.buildfarm.v1test.QueueStatus;
 
 // T = Something like JedisCluster
-public interface BalancedQueue<T> {
+public interface BalancedQueue {
 
   /**
    * @param val The value to push onto the queue.
    * @brief Push a value onto the queue.
    * @details Adds the value into one of the internal backend redis queues.
    */
-  void push(T jedis, String val);
+  void push(RedisDriver jedis, String val);
 
   /**
    * @param val The value to push onto the queue.
    * @brief Push a value onto the queue.
    * @details Adds the value into one of the internal backend redis queues.
    */
-  void push(T jedis, String val, double priority);
+  void push(RedisDriver jedis, String val, double priority);
 
   /**
    * @param val The value to remove.
@@ -27,7 +28,7 @@ public interface BalancedQueue<T> {
    * @details Removes an element from the dequeue and specifies whether it was removed.
    * @note Suggested return identifier: wasRemoved.
    */
-  boolean removeFromDequeue(T jedis, String val);
+  boolean removeFromDequeue(RedisDriver jedis, String val);
 
   /**
    * @return The value of the transfered element. null if the thread was interrupted.
@@ -37,7 +38,7 @@ public interface BalancedQueue<T> {
    * times out.
    * @note Suggested return identifier: val.
    */
-  String dequeue(T jedis) throws InterruptedException;
+  String dequeue(RedisDriver jedis) throws InterruptedException;
 
   /**
    * @return The queue that the balanced queue intends to pop from next.
@@ -88,7 +89,7 @@ public interface BalancedQueue<T> {
    * @details Checks the current length of the queue.
    * @note Suggested return identifier: length.
    */
-  long size(T jedis);
+  long size(RedisDriver jedis);
 
   /**
    * @return The current status of the queue.
@@ -96,21 +97,21 @@ public interface BalancedQueue<T> {
    * @details Helpful for understanding the current load on the queue and how elements are balanced.
    * @note Suggested return identifier: status.
    */
-  QueueStatus status(T jedis);
+  QueueStatus status(RedisDriver jedis);
 
   /**
    * @param visitor A visitor for each visited element in the queue.
    * @brief Visit each element in the queue.
    * @details Enacts a visitor over each element in the queue.
    */
-  void visit(T jedis, StringVisitor visitor);
+  void visit(RedisDriver jedis, StringVisitor visitor);
 
   /**
    * @param visitor A visitor for each visited element in the queue.
    * @brief Visit each element in the dequeue.
    * @details Enacts a visitor over each element in the dequeue.
    */
-  void visitDequeue(T jedis, StringVisitor visitor);
+  void visitDequeue(RedisDriver jedis, StringVisitor visitor);
 
   /**
    * @return Whether or not the queues values are evenly distributed by internal queues.
@@ -120,7 +121,7 @@ public interface BalancedQueue<T> {
    * of internal queues.
    * @note Suggested return identifier: isEvenlyDistributed.
    */
-  boolean isEvenlyDistributed(T jedis);
+  boolean isEvenlyDistributed(RedisDriver jedis);
 
   /**
    * @param jedis Jedis cluster client.
@@ -130,5 +131,5 @@ public interface BalancedQueue<T> {
    * @details Compares the size of the queue to configured max size. Queues may be configured to be
    * infinite in size.
    */
-  boolean canQueue(T jedis);
+  boolean canQueue(RedisDriver jedis);
 }

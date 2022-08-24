@@ -23,7 +23,7 @@ import com.google.common.collect.SetMultimap;
 import build.bazel.remote.execution.v2.Platform;
 import build.buildfarm.common.StringVisitor;
 import build.buildfarm.common.gencache.BalancedQueue;
-import build.buildfarm.common.gencache.Gencache.JedisCluster;
+import build.buildfarm.common.gencache.Gencache.RedisDriver;
 import build.buildfarm.common.gencache.Gencache.ProvisionedRedisQueue;
 import build.buildfarm.v1test.OperationQueueStatus;
 import build.buildfarm.v1test.QueueStatus;
@@ -77,7 +77,7 @@ public class OperationQueue {
    * @brief Visit each element in the dequeue.
    * @details Enacts a visitor over each element in the dequeue.
    */
-  public void visitDequeue(JedisCluster jedis, StringVisitor visitor) {
+  public void visitDequeue(RedisDriver jedis, StringVisitor visitor) {
     for (ProvisionedRedisQueue provisionedQueue : queues) {
       provisionedQueue.queue().visitDequeue(jedis, visitor);
     }
@@ -91,7 +91,7 @@ public class OperationQueue {
    * @details Removes an element from the dequeue and specifies whether it was removed.
    * @note Suggested return identifier: wasRemoved.
    */
-  public boolean removeFromDequeue(JedisCluster jedis, String val) {
+  public boolean removeFromDequeue(RedisDriver jedis, String val) {
     for (ProvisionedRedisQueue provisionedQueue : queues) {
       if (provisionedQueue.queue().removeFromDequeue(jedis, val)) {
         return true;
@@ -106,7 +106,7 @@ public class OperationQueue {
    * @brief Visit each element in the queue.
    * @details Enacts a visitor over each element in the queue.
    */
-  public void visit(JedisCluster jedis, StringVisitor visitor) {
+  public void visit(RedisDriver jedis, StringVisitor visitor) {
     for (ProvisionedRedisQueue provisionedQueue : queues) {
       provisionedQueue.queue().visit(jedis, visitor);
     }
@@ -119,7 +119,7 @@ public class OperationQueue {
    * @details Checks the current length of the queue.
    * @note Suggested return identifier: length.
    */
-  public long size(JedisCluster jedis) {
+  public long size(RedisDriver jedis) {
     // the accumulated size of all of the queues
     return queues.stream().mapToInt(i -> (int) i.queue().size(jedis)).sum();
   }
@@ -169,7 +169,7 @@ public class OperationQueue {
    * @details Adds the value into one of the internal backend redis queues.
    */
   public void push(
-      JedisCluster jedis, List<Platform.Property> provisions, String val, int priority
+      RedisDriver jedis, List<Platform.Property> provisions, String val, int priority
   ) {
     chooseEligibleQueue(provisions).push(jedis, val, (double) priority);
   }
@@ -184,7 +184,7 @@ public class OperationQueue {
    * times out.
    * @note Suggested return identifier: val.
    */
-  public String dequeue(JedisCluster jedis, List<Platform.Property> provisions)
+  public String dequeue(RedisDriver jedis, List<Platform.Property> provisions)
       throws InterruptedException {
     return chooseEligibleQueue(provisions).dequeue(jedis);
   }
@@ -197,7 +197,7 @@ public class OperationQueue {
    * @note Overloaded.
    * @note Suggested return identifier: status.
    */
-  public OperationQueueStatus status(JedisCluster jedis) {
+  public OperationQueueStatus status(RedisDriver jedis) {
     // get properties
     List<QueueStatus> provisions = new ArrayList<>();
     for (ProvisionedRedisQueue provisionedQueue : queues) {
@@ -220,7 +220,7 @@ public class OperationQueue {
    * @note Overloaded.
    * @note Suggested return identifier: status.
    */
-  public QueueStatus status(JedisCluster jedis, List<Platform.Property> provisions) {
+  public QueueStatus status(RedisDriver jedis, List<Platform.Property> provisions) {
     return chooseEligibleQueue(provisions).status(jedis);
   }
 
@@ -249,7 +249,7 @@ public class OperationQueue {
    * @details Compares the size of the queue to configured max size. Queues may be configured to be
    * infinite in size.
    */
-  public boolean canQueue(JedisCluster jedis) {
+  public boolean canQueue(RedisDriver jedis) {
     return maxQueueSize < 0 || size(jedis) < maxQueueSize;
   }
 
@@ -261,7 +261,7 @@ public class OperationQueue {
    * queue. If there no eligible queues, an exception is thrown.
    * @note Suggested return identifier: queue.
    */
-  private BalancedQueue<JedisCluster> chooseEligibleQueue(List<Platform.Property> provisions) {
+  private BalancedQueue<RedisDriver> chooseEligibleQueue(List<Platform.Property> provisions) {
     for (ProvisionedRedisQueue provisionedQueue : queues) {
       if (provisionedQueue.isEligible(toMultimap(provisions))) {
         return provisionedQueue.queue();

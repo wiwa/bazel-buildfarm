@@ -55,7 +55,7 @@ public class EnrichedOperationBuilder {
    * @note Suggested return identifier: operation.
    */
   public static EnrichedOperation build(
-      JedisCluster cluster, Instance instance, String operationKey) {
+      RedisDriver cluster, Instance instance, String operationKey) {
     EnrichedOperation operationWithMetadata = new EnrichedOperation();
     operationWithMetadata.operation = operationKeyToOperation(cluster, operationKey);
 
@@ -85,7 +85,7 @@ public class EnrichedOperationBuilder {
    * @return The looked up operation.
    * @note Suggested return identifier: operation.
    */
-  private static Operation operationKeyToOperation(JedisCluster cluster, String operationKey) {
+  private static Operation operationKeyToOperation(RedisDriver cluster, String operationKey) {
     String json = cluster.get(operationKey);
     return jsonToOperation(json);
   }

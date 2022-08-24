@@ -15,8 +15,11 @@
 package build.buildfarm.common.redis;
 
 import build.buildfarm.common.StringVisitor;
+import build.buildfarm.common.gencache.BalancedQueue;
 import build.buildfarm.common.gencache.RedisHashtags;
 import build.buildfarm.v1test.QueueStatus;
+import redis.clients.jedis.JedisCluster;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -30,7 +33,7 @@ import java.util.List;
  *     (since it exists in redis). Therefore, two redis queues with the same name, would in fact be
  *     the same underlying redis queues.
  */
-public class BalancedRedisQueue {
+public class BalancedRedisQueue implements BalancedQueue {
   private static final int START_TIMEOUT_SECONDS = 1;
 
   private static final int MAX_TIMEOUT_SECONDS = 8;

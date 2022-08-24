@@ -15,8 +15,8 @@
 package build.buildfarm.common.redis;
 
 import build.buildfarm.common.ScanCount;
-import build.buildfarm.common.gencache.Gencache.JedisCluster;
-import build.buildfarm.common.gencache.Gencache.JedisClusterPipeline;
+import build.buildfarm.common.gencache.Gencache.RedisDriver;
+import build.buildfarm.common.gencache.Gencache.RedisDriverPipeline;
 
 /**
  * @class RedisMap
@@ -53,7 +53,7 @@ public class RedisMap {
    * @details If the key already exists, then the value is replaced.
    * @note Overloaded.
    */
-  public void insert(JedisCluster jedis, String key, String value, int timeout_s) {
+  public void insert(RedisDriver jedis, String key, String value, int timeout_s) {
     jedis.setex(createKeyName(key), timeout_s, value);
   }
 
@@ -66,7 +66,7 @@ public class RedisMap {
    * @details If the key already exists, then the value is replaced.
    * @note Overloaded.
    */
-  public void insert(JedisCluster jedis, String key, String value, long timeout_s) {
+  public void insert(RedisDriver jedis, String key, String value, long timeout_s) {
     // Jedis only provides int precision.  this is fine as the units are seconds.
     // We supply an interface for longs as a convenience to callers.
     jedis.setex(createKeyName(key), (int) timeout_s, value);
@@ -79,7 +79,7 @@ public class RedisMap {
    * @details Deletes the key/value pair.
    * @note Overloaded.
    */
-  public void remove(JedisCluster jedis, String key) {
+  public void remove(RedisDriver jedis, String key) {
     jedis.del(createKeyName(key));
   }
 
@@ -90,8 +90,8 @@ public class RedisMap {
    * @details Done via pipeline.
    * @note Overloaded.
    */
-  public void remove(JedisCluster jedis, Iterable<String> keys) {
-    JedisClusterPipeline p = jedis.pipelined();
+  public void remove(RedisDriver jedis, Iterable<String> keys) {
+    RedisDriverPipeline p = jedis.pipelined();
     for (String key : keys) {
       p.del(createKeyName(key));
     }
@@ -106,7 +106,7 @@ public class RedisMap {
    * @details If the key does not exist, null is returned.
    * @note Suggested return identifier: value.
    */
-  public String get(JedisCluster jedis, String key) {
+  public String get(RedisDriver jedis, String key) {
     return jedis.get(createKeyName(key));
   }
 
@@ -118,7 +118,7 @@ public class RedisMap {
    * @details True if key exists. False if key does not exist.
    * @note Suggested return identifier: exists.
    */
-  public boolean exists(JedisCluster jedis, String key) {
+  public boolean exists(RedisDriver jedis, String key) {
     return jedis.exists(createKeyName(key));
   }
 
@@ -129,7 +129,7 @@ public class RedisMap {
    * @details May be inefficient to due scanning into memory and deduplicating.
    * @note Suggested return identifier: size.
    */
-  public int size(JedisCluster jedis) {
+  public int size(RedisDriver jedis) {
     return ScanCount.get(jedis, name + ":*", 1000);
   }
 

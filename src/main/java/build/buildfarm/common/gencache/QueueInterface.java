@@ -1,8 +1,9 @@
 package build.buildfarm.common.gencache;
 
 import build.buildfarm.common.StringVisitor;
+import build.buildfarm.common.gencache.Gencache.RedisDriver;
 
-public interface QueueInterface<T> {
+public interface QueueInterface {
 
 
   /**
@@ -10,14 +11,14 @@ public interface QueueInterface<T> {
    * @details Adds the value into the backend rdered set.
    * @param val The value to push onto the priority queue.
    */
-  void push(T jedis, String val);
+  void push(RedisDriver redis, String val);
 
   /**
    * @brief Push a value onto the queue with defined priority.
    * @details Adds the value into the backend rdered set.
    * @param val The value to push onto the priority queue.
    */
-  void push(T jedis, String val, double priority);
+  void push(RedisDriver redis, String val, double priority);
 
   /**
    * @brief Remove element from dequeue.
@@ -26,7 +27,7 @@ public interface QueueInterface<T> {
    * @return Whether or not the value was removed.
    * @note Suggested return identifier: wasRemoved.
    */
-  boolean removeFromDequeue(T jedis, String val);
+  boolean removeFromDequeue(RedisDriver redis, String val);
 
   /**
    * @brief Remove all elements that match from queue.
@@ -35,7 +36,7 @@ public interface QueueInterface<T> {
    * @return Whether or not the value was removed.
    * @note Suggested return identifier: wasRemoved.
    */
-  boolean removeAll(T jedis, String val);
+  boolean removeAll(RedisDriver redis, String val);
 
   /**
    * @brief Pop element into internal dequeue and return value.
@@ -47,7 +48,7 @@ public interface QueueInterface<T> {
    * @note Overloaded.
    * @note Suggested return identifier: val.
    */
-  String dequeue(T jedis, int timeout_s) throws InterruptedException;
+  String dequeue(RedisDriver redis, int timeout_s) throws InterruptedException;
 
   /**
    * @brief Pop element into internal dequeue and return value.
@@ -56,7 +57,7 @@ public interface QueueInterface<T> {
    * @return The value of the transfered element. null if nothing was dequeued.
    * @note Suggested return identifier: val.
    */
-  String nonBlockingDequeue(T jedis) throws InterruptedException;
+  String nonBlockingDequeue(RedisDriver redis) throws InterruptedException;
 
   /**
    * @brief Get name.
@@ -81,7 +82,7 @@ public interface QueueInterface<T> {
    * @return The current length of the queue.
    * @note Suggested return identifier: length.
    */
-  long size(T jedis);
+  long size(RedisDriver redis);
 
   /**
    * @brief Visit each element in the queue.
@@ -89,12 +90,12 @@ public interface QueueInterface<T> {
    * @param visitor A visitor for each visited element in the queue.
    * @note Overloaded.
    */
-  void visit(T jedis, StringVisitor visitor);
+  void visit(RedisDriver redis, StringVisitor visitor);
 
   /**
    * @brief Visit each element in the dequeue.
    * @details Enacts a visitor over each element in the dequeue.
    * @param visitor A visitor for each visited element in the queue.
    */
-  void visitDequeue(T jedis, StringVisitor visitor);
+  void visitDequeue(RedisDriver redis, StringVisitor visitor);
 }

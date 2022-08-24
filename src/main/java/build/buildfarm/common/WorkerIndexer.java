@@ -19,7 +19,6 @@ import java.util.Set;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-import build.buildfarm.common.gencache.Gencache;
 import build.buildfarm.common.gencache.Gencache.*;
 
 /**
@@ -41,7 +40,7 @@ public class WorkerIndexer {
    * @note Suggested return identifier: indexResults.
    */
   public static CasIndexResults removeWorkerIndexesFromCas(
-      JedisCluster cluster, CasIndexSettings settings) {
+      RedisDriver cluster, CasIndexSettings settings) {
     CasIndexResults results = new CasIndexResults();
 
     // JedisCluster only supports SCAN commands with MATCH patterns containing hash-tags.
@@ -52,7 +51,7 @@ public class WorkerIndexer {
         .values()
         .forEach(
             pool -> {
-              try (Jedis node = pool.getResource()) {
+              try (RedisClient node = pool.getResource()) {
                 reindexNode(cluster, node, settings, results);
               }
             });
@@ -69,7 +68,7 @@ public class WorkerIndexer {
    */
   @SuppressWarnings({"unchecked", "rawtypes"})
   private static void reindexNode(
-      JedisCluster cluster, Jedis node, CasIndexSettings settings, CasIndexResults results) {
+      RedisDriver cluster, RedisClient node, CasIndexSettings settings, CasIndexResults results) {
 
     Set<String> activeWorkers = cluster.hkeys("Workers");
     logger.info(

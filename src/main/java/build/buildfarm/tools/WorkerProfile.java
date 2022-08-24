@@ -146,7 +146,7 @@ class WorkerProfile {
   }
 
   private static Set<String> fetchWorkers(
-      JedisCluster jedis, RedisShardBackplaneConfig config, long now) {
+      RedisDriver jedis, RedisShardBackplaneConfig config, long now) {
     Set<String> workers = Sets.newConcurrentHashSet();
     for (Map.Entry<String, String> entry : jedis.hgetAll(config.getWorkersHashName()).entrySet()) {
       String json = entry.getValue();

@@ -36,7 +36,7 @@ public class ScanCount {
    * @return Total number of query results.
    * @note Suggested return identifier: count.
    */
-  public static int get(JedisCluster cluster, String query, int scanCount) {
+  public static int get(RedisDriver cluster, String query, int scanCount) {
     Set<String> keys = Sets.newHashSet();
 
     // JedisCluster only supports SCAN commands with MATCH patterns containing hash-tags.
@@ -47,7 +47,7 @@ public class ScanCount {
         .values()
         .forEach(
             pool -> {
-              try (Jedis node = pool.getResource()) {
+              try (RedisClient node = pool.getResource()) {
                 addKeys(node, keys, query, scanCount);
               }
             });
@@ -64,7 +64,7 @@ public class ScanCount {
    * @param scanCount The count per scan.
    */
   @SuppressWarnings({"unchecked", "rawtypes"})
-  private static void addKeys(Jedis node, Set<String> keys, String query, int scanCount) {
+  private static void addKeys(RedisClient node, Set<String> keys, String query, int scanCount) {
     // construct query
     ScanParams params = new ScanParams();
     params.match(query);
