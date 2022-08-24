@@ -96,4 +96,14 @@ public interface Gencache {
     String explainEligibility(SetMultimap<String, String> properties);
 
   }
+
+  interface NodeHashes<T> {
+
+    List<String> getEvenlyDistributedHashesWithPrefix(T jedis, String prefix);
+  }
+
+  interface QueueFactory {
+
+    QueueInterface getQueue(String queueType, String name);
+  }
 }
