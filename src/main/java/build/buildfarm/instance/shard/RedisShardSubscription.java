@@ -15,7 +15,7 @@
 package build.buildfarm.instance.shard;
 
 import build.buildfarm.common.function.InterruptingRunnable;
-import build.buildfarm.common.redis.RedisClient;
+import build.buildfarm.common.redis.JedisClient;
 import io.grpc.Status;
 import java.io.IOException;
 import java.util.List;
@@ -32,7 +32,7 @@ class RedisShardSubscription implements Runnable {
   private final InterruptingRunnable onUnsubscribe;
   private final Consumer<JedisCluster> onReset;
   private final Supplier<List<String>> subscriptions;
-  private final RedisClient client;
+  private final JedisClient client;
   private final AtomicBoolean stopped = new AtomicBoolean(false);
 
   RedisShardSubscription(
@@ -40,7 +40,7 @@ class RedisShardSubscription implements Runnable {
       InterruptingRunnable onUnsubscribe,
       Consumer<JedisCluster> onReset,
       Supplier<List<String>> subscriptions,
-      RedisClient client) {
+      JedisClient client) {
     this.subscriber = subscriber;
     this.onUnsubscribe = onUnsubscribe;
     this.onReset = onReset;

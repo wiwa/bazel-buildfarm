@@ -70,7 +70,7 @@ import build.buildfarm.common.Time;
 import build.buildfarm.common.Watcher;
 import build.buildfarm.common.WorkerIndexer;
 import build.buildfarm.common.function.InterruptingRunnable;
-import build.buildfarm.common.redis.RedisClient;
+import build.buildfarm.common.redis.JedisClient;
 import build.buildfarm.instance.Instance;
 import build.buildfarm.instance.shard.RedisShardSubscriber.TimedWatchFuture;
 import build.buildfarm.operations.FindOperationsResults;
@@ -139,7 +139,7 @@ public class RedisShardBackplane implements Backplane {
   private RedisShardSubscriber subscriber = null;
   private RedisShardSubscription operationSubscription = null;
   private ExecutorService subscriberService = null;
-  private @Nullable RedisClient client = null;
+  private @Nullable JedisClient client = null;
 
   private final Set<String> workerSet = Collections.synchronizedSet(new HashSet<>());
   private long workerSetExpiresAt = 0;
@@ -508,7 +508,7 @@ public class RedisShardBackplane implements Backplane {
     // Construct a single redis client to be used throughout the entire backplane.
     // We wish to avoid various synchronous and error handling issues that could occur when using
     // multiple clients.
-    client = new RedisClient(jedisClusterFactory.get());
+    client = new JedisClient(jedisClusterFactory.get());
 
     // Create containers that make up the backplane
     state = RedisDistributedStateCreator.create(client, config);

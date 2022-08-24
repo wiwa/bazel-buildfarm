@@ -30,7 +30,7 @@ import org.junit.runners.JUnit4;
 public class RedisClientTest {
   @Test
   public void runExceptionEndOfStreamIsUnavailable() throws IOException, InterruptedException {
-    RedisClient client = new RedisClient(mock(JedisCluster.class));
+    JedisClient client = new JedisClient(mock(JedisCluster.class));
     Status status = Status.UNKNOWN;
     try {
       client.run(
@@ -45,7 +45,7 @@ public class RedisClientTest {
 
   @Test
   public void runExceptionConnectionResetIsUnavailable() throws IOException, InterruptedException {
-    RedisClient client = new RedisClient(mock(JedisCluster.class));
+    JedisClient client = new JedisClient(mock(JedisCluster.class));
     Status status = Status.UNKNOWN;
     try {
       client.run(
@@ -61,7 +61,7 @@ public class RedisClientTest {
   @Test
   public void runExceptionSocketTimeoutExceptionIsDeadlineExceeded()
       throws IOException, InterruptedException {
-    RedisClient client = new RedisClient(mock(JedisCluster.class));
+    JedisClient client = new JedisClient(mock(JedisCluster.class));
     Status status = Status.UNKNOWN;
     try {
       client.run(

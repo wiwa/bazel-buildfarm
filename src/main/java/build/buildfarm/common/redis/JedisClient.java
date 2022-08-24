@@ -14,27 +14,22 @@
 
 package build.buildfarm.common.redis;
 
-import io.grpc.Status;
-import io.grpc.Status.Code;
-import java.io.Closeable;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 
-public class RedisClient implements Closeable {
-  private static final String MISCONF_RESPONSE = "MISCONF";
+import build.buildfarm.common.gencache.RedisClient;
+import io.grpc.Status;
+import io.grpc.Status.Code;
+import redis.clients.jedis.exceptions.JedisConnectionException;
+import redis.clients.jedis.exceptions.JedisDataException;
+import redis.clients.jedis.exceptions.JedisNoReachableClusterNodeException;
 
-  @FunctionalInterface
-  public interface JedisContext<T> {
-    T run(JedisCluster jedis) throws JedisException;
-  }
+public class JedisClient extends RedisClient {
 
-  @FunctionalInterface
-  public interface JedisInterruptibleContext<T> {
-    T run(JedisCluster jedis) throws InterruptedException, JedisException;
+  public JedisClient(JedisDriver redis) {
+    super(redis);
   }
 
   private static class JedisMisconfigurationException extends JedisDataException {
@@ -51,65 +46,12 @@ public class RedisClient implements Closeable {
     }
   }
 
-  private final JedisCluster jedis;
-
-  private boolean closed = false;
-
-  public RedisClient(JedisCluster jedis) {
-    this.jedis = jedis;
-  }
-
   @Override
-  public synchronized void close() {
-    closed = true;
-  }
-
-  public synchronized boolean isClosed() {
-    return closed;
-  }
-
-  private synchronized void throwIfClosed() throws IOException {
-    if (closed) {
-      throw new IOException(
-          Status.UNAVAILABLE.withDescription("client is closed").asRuntimeException());
-    }
-  }
-
-  public void run(Consumer<JedisCluster> withJedis) throws IOException {
-    call(
-        (JedisContext<Void>)
-            jedis -> {
-              withJedis.accept(jedis);
-              return null;
-            });
-  }
-
-  public <T> T blockingCall(JedisInterruptibleContext<T> withJedis)
-      throws IOException, InterruptedException {
-    AtomicReference<InterruptedException> interruption = new AtomicReference<>(null);
-    T result =
-        call(
-            jedis -> {
-              try {
-                return withJedis.run(jedis);
-              } catch (InterruptedException e) {
-                interruption.set(e);
-                return null;
-              }
-            });
-    InterruptedException e = interruption.get();
-    if (e != null) {
-      throw e;
-    }
-    return result;
-  }
-
-  @SuppressWarnings("ConstantConditions")
-  public <T> T call(JedisContext<T> withJedis) throws IOException {
+  public <T> T call(RedisContext<T> withRedis) throws IOException {
     throwIfClosed();
     try {
       try {
-        return withJedis.run(jedis);
+        return withRedis.run(redis);
       } catch (JedisDataException e) {
         if (e.getMessage().startsWith(MISCONF_RESPONSE)) {
           throw new JedisMisconfigurationException(e.getMessage());

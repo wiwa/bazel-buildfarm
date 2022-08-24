@@ -16,7 +16,7 @@ package build.buildfarm.tools;
 
 import build.buildfarm.common.DigestUtil;
 import build.buildfarm.common.config.ShardWorkerOptions;
-import build.buildfarm.common.redis.RedisClient;
+import build.buildfarm.common.redis.JedisClient;
 import build.buildfarm.instance.Instance;
 import build.buildfarm.instance.shard.JedisClusterFactory;
 import build.buildfarm.instance.stub.StubInstance;
@@ -140,7 +140,7 @@ class WorkerProfile {
       e.printStackTrace();
     }
 
-    RedisClient client = new RedisClient(JedisClusterFactory.create(config).get());
+    JedisClient client = new JedisClient(JedisClusterFactory.create(config).get());
     RedisShardBackplaneConfig finalConfig = config;
     return client.call(jedis -> fetchWorkers(jedis, finalConfig, System.currentTimeMillis()));
   }

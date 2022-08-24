@@ -17,7 +17,7 @@ package build.buildfarm.instance.shard;
 import build.bazel.remote.execution.v2.Platform;
 import build.buildfarm.common.redis.BalancedRedisQueue;
 import build.buildfarm.common.redis.ProvisionedRedisQueue;
-import build.buildfarm.common.redis.RedisClient;
+import build.buildfarm.common.redis.JedisClient;
 import build.buildfarm.common.redis.RedisHashMap;
 import build.buildfarm.common.gencache.RedisHashtags;
 import build.buildfarm.common.redis.RedisMap;
@@ -35,7 +35,7 @@ import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
 
 public class RedisDistributedStateCreator {
-  public static DistributedState create(RedisClient client, RedisShardBackplaneConfig config)
+  public static DistributedState create(JedisClient client, RedisShardBackplaneConfig config)
       throws IOException {
     DistributedState state = new DistributedState();
 
@@ -73,7 +73,7 @@ public class RedisDistributedStateCreator {
   }
 
   private static BalancedRedisQueue createPrequeue(
-      RedisClient client, RedisShardBackplaneConfig config) throws IOException {
+      JedisClient client, RedisShardBackplaneConfig config) throws IOException {
     // Construct the prequeue so that elements are balanced across all redis nodes.
     return new BalancedRedisQueue(
         getPreQueuedOperationsListName(config),
@@ -83,7 +83,7 @@ public class RedisDistributedStateCreator {
   }
 
   private static OperationQueue createOperationQueue(
-      RedisClient client, RedisShardBackplaneConfig config) throws IOException {
+      JedisClient client, RedisShardBackplaneConfig config) throws IOException {
     // Construct an operation queue based on configuration.
     // An operation queue consists of multiple provisioned queues in which the order dictates the
     // eligibility and placement of operations.
@@ -123,7 +123,7 @@ public class RedisDistributedStateCreator {
     return new OperationQueue(provisionedQueues.build(), config.getMaxQueueDepth());
   }
 
-  static List<String> getQueueHashes(RedisClient client, String queueName) throws IOException {
+  static List<String> getQueueHashes(JedisClient client, String queueName) throws IOException {
     return client.call(
         jedis ->
             RedisNodeHashes.getEvenlyDistributedHashesWithPrefix(

@@ -17,7 +17,7 @@ package build.buildfarm.instance.shard;
 import build.bazel.remote.execution.v2.Digest;
 import build.buildfarm.common.DigestUtil;
 import build.buildfarm.common.ScanCount;
-import build.buildfarm.common.redis.RedisClient;
+import build.buildfarm.common.redis.JedisClient;
 import com.google.common.collect.ImmutableMap;
 import java.io.IOException;
 import java.util.Map;
@@ -69,7 +69,7 @@ public class JedisCasWorkerMap implements CasWorkerMap {
    */
   @Override
   public void adjust(
-      RedisClient client, Digest blobDigest, Set<String> addWorkers, Set<String> removeWorkers)
+      JedisClient client, Digest blobDigest, Set<String> addWorkers, Set<String> removeWorkers)
       throws IOException {
     String key = redisCasKey(blobDigest);
     client.run(
@@ -93,7 +93,7 @@ public class JedisCasWorkerMap implements CasWorkerMap {
    * @param workerName The worker to add for looking up the blob.
    */
   @Override
-  public void add(RedisClient client, Digest blobDigest, String workerName) throws IOException {
+  public void add(JedisClient client, Digest blobDigest, String workerName) throws IOException {
     String key = redisCasKey(blobDigest);
     client.run(
         jedis -> {
@@ -111,7 +111,7 @@ public class JedisCasWorkerMap implements CasWorkerMap {
    * @param workerName The worker to add for looking up the blobs.
    */
   @Override
-  public void addAll(RedisClient client, Iterable<Digest> blobDigests, String workerName)
+  public void addAll(JedisClient client, Iterable<Digest> blobDigests, String workerName)
       throws IOException {
     client.run(
         jedis -> {
@@ -133,7 +133,7 @@ public class JedisCasWorkerMap implements CasWorkerMap {
    * @param workerName The worker name to remove.
    */
   @Override
-  public void remove(RedisClient client, Digest blobDigest, String workerName) throws IOException {
+  public void remove(JedisClient client, Digest blobDigest, String workerName) throws IOException {
     String key = redisCasKey(blobDigest);
     client.run(jedis -> jedis.srem(key, workerName));
   }
@@ -147,7 +147,7 @@ public class JedisCasWorkerMap implements CasWorkerMap {
    * @param workerName The worker name to remove.
    */
   @Override
-  public void removeAll(RedisClient client, Iterable<Digest> blobDigests, String workerName)
+  public void removeAll(JedisClient client, Iterable<Digest> blobDigests, String workerName)
       throws IOException {
     client.run(
         jedis -> {
@@ -169,7 +169,7 @@ public class JedisCasWorkerMap implements CasWorkerMap {
    * @note Suggested return identifier: workerName.
    */
   @Override
-  public String getAny(RedisClient client, Digest blobDigest) throws IOException {
+  public String getAny(JedisClient client, Digest blobDigest) throws IOException {
     String key = redisCasKey(blobDigest);
     return client.call(jedis -> jedis.srandmember(key));
   }
@@ -183,7 +183,7 @@ public class JedisCasWorkerMap implements CasWorkerMap {
    * @note Suggested return identifier: workerNames.
    */
   @Override
-  public Set<String> get(RedisClient client, Digest blobDigest) throws IOException {
+  public Set<String> get(JedisClient client, Digest blobDigest) throws IOException {
     String key = redisCasKey(blobDigest);
     return client.call(jedis -> jedis.smembers(key));
   }
@@ -197,7 +197,7 @@ public class JedisCasWorkerMap implements CasWorkerMap {
    * @note Suggested return identifier: casWorkerMap.
    */
   @Override
-  public Map<Digest, Set<String>> getMap(RedisClient client, Iterable<Digest> blobDigests)
+  public Map<Digest, Set<String>> getMap(JedisClient client, Iterable<Digest> blobDigests)
       throws IOException {
     ImmutableMap.Builder<Digest, Set<String>> blobDigestsWorkers = new ImmutableMap.Builder<>();
     client.run(
@@ -222,7 +222,7 @@ public class JedisCasWorkerMap implements CasWorkerMap {
    * @return The size of the map.
    * @note Suggested return identifier: size.
    */
-  public int size(RedisClient client) throws IOException {
+  public int size(JedisClient client) throws IOException {
     return client.call(jedis -> ScanCount.get(jedis, name + ":*", 1000));
   }
 
