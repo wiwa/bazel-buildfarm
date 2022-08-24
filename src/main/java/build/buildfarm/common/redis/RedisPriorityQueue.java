@@ -32,7 +32,7 @@ import java.util.Set;
  *     Therefore, two redis queues with the same name, would in fact be the same underlying redis
  *     queue.
  */
-public class RedisPriorityQueue extends QueueInterface {
+public class RedisPriorityQueue {
   /**
    * @field name
    * @brief The unique name of the queue.

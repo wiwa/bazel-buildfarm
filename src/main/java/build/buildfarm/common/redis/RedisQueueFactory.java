@@ -14,12 +14,14 @@
 
 package build.buildfarm.common.redis;
 
+import build.buildfarm.common.gencache.QueueInterface;
+
 /**
  * @class RedisQueueFactory
  * @brief A redis queue factory.
  */
 public class RedisQueueFactory {
-  public RedisQueueInterface getQueue(String queueType, String name) {
+  public QueueInterface getQueue(String queueType, String name) {
     if (queueType == null) {
       return null;
     }
@@ -27,7 +29,9 @@ public class RedisQueueFactory {
       return new RedisQueue(name);
 
     } else if (queueType.equalsIgnoreCase("priority")) {
-      return new RedisPriorityQueue(name);
+      return new RedisQueue(name);
+      // TODO
+//      return new RedisPriorityQueue(name);
     }
     return null;
   }

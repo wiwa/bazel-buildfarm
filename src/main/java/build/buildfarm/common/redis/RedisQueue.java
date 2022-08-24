@@ -15,6 +15,10 @@
 package build.buildfarm.common.redis;
 
 import build.buildfarm.common.StringVisitor;
+import build.buildfarm.common.gencache.Gencache;
+import build.buildfarm.common.gencache.Gencache.RedisDriver;
+import build.buildfarm.common.gencache.QueueInterface;
+
 import java.util.List;
 
 /**
@@ -26,7 +30,7 @@ import java.util.List;
  *     Therefore, two redis queues with the same name, would in fact be the same underlying redis
  *     queue.
  */
-public class RedisQueue extends RedisQueueInterface {
+public class RedisQueue implements QueueInterface {
   /**
    * @field name
    * @brief The unique name of the queue.
@@ -52,7 +56,7 @@ public class RedisQueue extends RedisQueueInterface {
    * @details Adds the value into the backend redis queue.
    * @param val The value to push onto the queue.
    */
-  public void push(JedisCluster jedis, String val) {
+  public void push(RedisDriver jedis, String val) {
     push(jedis, val, 1);
   }
 
@@ -61,7 +65,7 @@ public class RedisQueue extends RedisQueueInterface {
    * @details Adds the value into the backend redis queue.
    * @param val The value to push onto the queue.
    */
-  public void push(JedisCluster jedis, String val, double priority) {
+  public void push(RedisDriver jedis, String val, double priority) {
     jedis.lpush(name, val);
   }
 
@@ -72,7 +76,7 @@ public class RedisQueue extends RedisQueueInterface {
    * @return Whether or not the value was removed.
    * @note Suggested return identifier: wasRemoved.
    */
-  public boolean removeFromDequeue(JedisCluster jedis, String val) {
+  public boolean removeFromDequeue(RedisDriver jedis, String val) {
     return jedis.lrem(getDequeueName(), -1, val) != 0;
   }
 
@@ -83,7 +87,7 @@ public class RedisQueue extends RedisQueueInterface {
    * @return Whether or not the value was removed.
    * @note Suggested return identifier: wasRemoved.
    */
-  public boolean removeAll(JedisCluster jedis, String val) {
+  public boolean removeAll(RedisDriver jedis, String val) {
     return jedis.lrem(name, 0, val) != 0;
   }
 
@@ -97,7 +101,7 @@ public class RedisQueue extends RedisQueueInterface {
    * @note Overloaded.
    * @note Suggested return identifier: val.
    */
-  public String dequeue(JedisCluster jedis, int timeout_s) throws InterruptedException {
+  public String dequeue(RedisDriver jedis, int timeout_s) throws InterruptedException {
     for (int i = 0; i < timeout_s; ++i) {
       String val = jedis.brpoplpush(name, getDequeueName(), timeout_s);
       if (val != null) {
@@ -114,7 +118,7 @@ public class RedisQueue extends RedisQueueInterface {
    * @return The value of the transfered element. null if nothing was dequeued.
    * @note Suggested return identifier: val.
    */
-  public String nonBlockingDequeue(JedisCluster jedis) throws InterruptedException {
+  public String nonBlockingDequeue(RedisDriver jedis) throws InterruptedException {
     String val = jedis.rpoplpush(name, getDequeueName());
     if (val != null) {
       return val;
@@ -152,7 +156,7 @@ public class RedisQueue extends RedisQueueInterface {
    * @return The current length of the queue.
    * @note Suggested return identifier: length.
    */
-  public long size(JedisCluster jedis) {
+  public long size(RedisDriver jedis) {
     return jedis.llen(name);
   }
 
@@ -162,7 +166,7 @@ public class RedisQueue extends RedisQueueInterface {
    * @param visitor A visitor for each visited element in the queue.
    * @note Overloaded.
    */
-  public void visit(JedisCluster jedis, StringVisitor visitor) {
+  public void visit(RedisDriver jedis, StringVisitor visitor) {
     visit(jedis, name, visitor);
   }
 
@@ -171,7 +175,7 @@ public class RedisQueue extends RedisQueueInterface {
    * @details Enacts a visitor over each element in the dequeue.
    * @param visitor A visitor for each visited element in the queue.
    */
-  public void visitDequeue(JedisCluster jedis, StringVisitor visitor) {
+  public void visitDequeue(RedisDriver jedis, StringVisitor visitor) {
     visit(jedis, getDequeueName(), visitor);
   }
 
@@ -182,7 +186,7 @@ public class RedisQueue extends RedisQueueInterface {
    * @param visitor A visitor for each visited element in the queue.
    * @note Overloaded.
    */
-  private void visit(JedisCluster jedis, String queueName, StringVisitor visitor) {
+  private void visit(RedisDriver jedis, String queueName, StringVisitor visitor) {
     int listPageSize = 10000;
 
     int index = 0;

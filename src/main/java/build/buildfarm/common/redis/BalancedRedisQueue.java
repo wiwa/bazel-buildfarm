@@ -21,6 +21,7 @@ import java.util.List;
 import build.buildfarm.common.StringVisitor;
 import build.buildfarm.common.gencache.BalancedQueue;
 import build.buildfarm.common.gencache.Gencache.RedisDriver;
+import build.buildfarm.common.gencache.QueueInterface;
 import build.buildfarm.common.gencache.RedisHashtags;
 import build.buildfarm.v1test.QueueStatus;
 
@@ -78,7 +79,7 @@ public class BalancedRedisQueue implements BalancedQueue {
    * @details Although these are multiple queues, the balanced redis queue treats them as one in its
    *     interface.
    */
-  private final List<RedisQueueInterface> queues = new ArrayList<>();
+  private final List<QueueInterface> queues = new ArrayList<>();
 
   /**
    * @field currentPushQueue
@@ -175,7 +176,7 @@ public class BalancedRedisQueue implements BalancedQueue {
    * @note Suggested return identifier: wasRemoved.
    */
   public boolean removeFromDequeue(RedisDriver jedis, String val) {
-    for (RedisQueueInterface queue : partialIterationQueueOrder()) {
+    for (QueueInterface queue : partialIterationQueueOrder()) {
       if (queue.removeFromDequeue(jedis, val)) {
         return true;
       }
@@ -216,7 +217,7 @@ public class BalancedRedisQueue implements BalancedQueue {
     int currentTimeout_s = START_TIMEOUT_SECONDS;
     while (true) {
       final String val;
-      RedisQueueInterface queue = queues.get(roundRobinPopIndex());
+      QueueInterface queue = queues.get(roundRobinPopIndex());
       if (blocking) {
         val = queue.dequeue(jedis, currentTimeout_s);
       } else {
@@ -244,7 +245,7 @@ public class BalancedRedisQueue implements BalancedQueue {
    * @return The queue that the balanced queue intends to pop from next.
    * @note Suggested return identifier: currentPopQueue.
    */
-  public RedisQueueInterface getCurrentPopQueue() {
+  public QueueInterface getCurrentPopQueue() {
     return queues.get(currentPopQueue);
   }
 
@@ -265,7 +266,7 @@ public class BalancedRedisQueue implements BalancedQueue {
    * @return The internal queue found at that index.
    * @note Suggested return identifier: internalQueue.
    */
-  public RedisQueueInterface getInternalQueue(int index) {
+  public QueueInterface getInternalQueue(int index) {
     return queues.get(index);
   }
 
@@ -300,7 +301,7 @@ public class BalancedRedisQueue implements BalancedQueue {
   public long size(RedisDriver jedis) {
     // the accumulated size of all of the queues
     long size = 0;
-    for (RedisQueueInterface queue : queues) {
+    for (QueueInterface queue : queues) {
       size += queue.size(jedis);
     }
     return size;
@@ -316,7 +317,7 @@ public class BalancedRedisQueue implements BalancedQueue {
     // get properties
     long size = size(jedis);
     List<Long> sizes = new ArrayList<>();
-    for (RedisQueueInterface queue : queues) {
+    for (QueueInterface queue : queues) {
       sizes.add(queue.size(jedis));
     }
 
@@ -330,7 +331,7 @@ public class BalancedRedisQueue implements BalancedQueue {
    * @param visitor A visitor for each visited element in the queue.
    */
   public void visit(RedisDriver jedis, StringVisitor visitor) {
-    for (RedisQueueInterface queue : fullIterationQueueOrder()) {
+    for (QueueInterface queue : fullIterationQueueOrder()) {
       queue.visit(jedis, visitor);
     }
   }
@@ -341,7 +342,7 @@ public class BalancedRedisQueue implements BalancedQueue {
    * @param visitor A visitor for each visited element in the queue.
    */
   public void visitDequeue(RedisDriver jedis, StringVisitor visitor) {
-    for (RedisQueueInterface queue : fullIterationQueueOrder()) {
+    for (QueueInterface queue : fullIterationQueueOrder()) {
       queue.visitDequeue(jedis, visitor);
     }
   }
@@ -356,7 +357,7 @@ public class BalancedRedisQueue implements BalancedQueue {
    */
   public boolean isEvenlyDistributed(RedisDriver jedis) {
     long size = queues.get(0).size(jedis);
-    for (RedisQueueInterface queue : partialIterationQueueOrder()) {
+    for (QueueInterface queue : partialIterationQueueOrder()) {
       if (queue.size(jedis) != size) {
         return false;
       }
@@ -454,7 +455,7 @@ public class BalancedRedisQueue implements BalancedQueue {
    * @return An ordered list of queues.
    * @note Suggested return identifier: queues.
    */
-  private List<RedisQueueInterface> fullIterationQueueOrder() {
+  private List<QueueInterface> fullIterationQueueOrder() {
     // if we are going to iterate over all of the queues
     // there will be no noticeable side effects from the order
     return queues;
@@ -470,11 +471,11 @@ public class BalancedRedisQueue implements BalancedQueue {
    * @return An ordered list of queues.
    * @note Suggested return identifier: queues.
    */
-  private List<RedisQueueInterface> partialIterationQueueOrder() {
+  private List<QueueInterface> partialIterationQueueOrder() {
     // to improve cpu utilization, we can try randomizing
     // the order we traverse the internal queues for operations
     // that may return early
-    List<RedisQueueInterface> randomQueues = new ArrayList<>(queues);
+    List<QueueInterface> randomQueues = new ArrayList<>(queues);
     Collections.shuffle(randomQueues);
     return randomQueues;
   }

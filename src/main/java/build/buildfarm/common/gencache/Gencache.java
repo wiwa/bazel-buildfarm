@@ -34,7 +34,17 @@ public interface Gencache {
     Set<String> smembers(final String key);
     Long sadd(final String key, final String... member);
 
+    Long llen(final String key);
+
+    Long lpush(final String key, final String... string);
+
+    List<String> lrange(final String key, final long start, final long stop);
+
     Long lrem(final String key, final long count, final String value);
+
+    String brpoplpush(final String source, final String destination, final int timeout);
+
+    String rpoplpush(final String srckey, final String dstkey);
 
     Set<String> hkeys(final String key);
 
