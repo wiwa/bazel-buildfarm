@@ -18,6 +18,7 @@ public interface Gencache {
     public abstract T getResource();
   }
 
+  // TODO we need to be careful about performance
   interface RedisDriver {
 
     Map<String, Pool<RedisClient>> getClusterNodes();
@@ -33,6 +34,8 @@ public interface Gencache {
     Set<String> smembers(final String key);
     Long sadd(final String key, final String... member);
 
+    Long lrem(final String key, final long count, final String value);
+
     Set<String> hkeys(final String key);
 
     Map<String, String> hgetAll(final String key);
@@ -45,9 +48,19 @@ public interface Gencache {
 
     Long hdel(final String key, final String... field);
 
-    RedisDriverPipeline pipelined();
-
     Long hlen(final String key);
+
+    Long zadd(final String key, final double score, final String member);
+
+    Long zrem(final String key, final String... members);
+
+    Long zcard(final String key);
+
+    Set<String> zrange(final String key, final long start, final long stop);
+
+    Object eval(final String script, final List<String> keys, final List<String> args);
+
+    RedisDriverPipeline pipelined();
   }
   interface RedisDriverPipeline {
     Long del(final String key);

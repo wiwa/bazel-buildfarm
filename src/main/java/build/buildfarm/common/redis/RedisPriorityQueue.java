@@ -15,7 +15,9 @@
 package build.buildfarm.common.redis;
 
 import build.buildfarm.common.StringVisitor;
+import build.buildfarm.common.gencache.QueueInterface;
 import build.buildfarm.common.gencache.Timestamp;
+import redis.clients.jedis.JedisCluster;
 
 import java.util.Arrays;
 import java.util.List;
@@ -30,7 +32,7 @@ import java.util.Set;
  *     Therefore, two redis queues with the same name, would in fact be the same underlying redis
  *     queue.
  */
-public class RedisPriorityQueue extends RedisQueueInterface {
+public class RedisPriorityQueue extends QueueInterface {
   /**
    * @field name
    * @brief The unique name of the queue.

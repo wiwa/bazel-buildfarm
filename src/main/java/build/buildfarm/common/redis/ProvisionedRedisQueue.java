@@ -16,6 +16,7 @@ package build.buildfarm.common.redis;
 
 import build.buildfarm.common.ExecutionProperties;
 import build.buildfarm.common.MapUtils;
+import build.buildfarm.common.gencache.BalancedQueue;
 import build.buildfarm.common.gencache.EligibilityResult;
 import build.buildfarm.common.gencache.FilteredProvisions;
 
@@ -81,7 +82,7 @@ public class ProvisionedRedisQueue {
    * @brief The queue itself.
    * @details A balanced redis queue designed to hold particularly provisioned elements.
    */
-  private final BalancedRedisQueue queue;
+  private final BalancedQueue queue;
 
   /**
    * @brief Constructor.
@@ -206,7 +207,7 @@ public class ProvisionedRedisQueue {
    * @return The internal queue.
    * @note Suggested return identifier: queue.
    */
-  public BalancedRedisQueue queue() {
+  public BalancedQueue queue() {
     return queue;
   }
 
