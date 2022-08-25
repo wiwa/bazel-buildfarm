@@ -42,7 +42,7 @@ public interface Gencache {
 
     Long lrem(final String key, final long count, final String value);
 
-    String brpoplpush(final String source, final String destination, final int timeout);
+    String brpoplpush(final String source, final String destination, final int timeout) throws InterruptedException;
 
     String rpoplpush(final String srckey, final String dstkey);
 

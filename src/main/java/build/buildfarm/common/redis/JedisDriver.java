@@ -80,8 +80,33 @@ public class JedisDriver implements RedisDriver {
   }
 
   @Override
+  public Long llen(String key) {
+    return jedis.llen(key);
+  }
+
+  @Override
+  public Long lpush(String key, String... string) {
+    return jedis.lpush(key, string);
+  }
+
+  @Override
+  public List<String> lrange(String key, long start, long stop) {
+    return jedis.lrange(key, start, stop);
+  }
+
+  @Override
   public Long lrem(String key, long count, String value) {
     return jedis.lrem(key, count, value);
+  }
+
+  @Override
+  public String brpoplpush(String source, String destination, int timeout) throws InterruptedException {
+    return jedis.brpoplpush(source, destination, timeout);
+  }
+
+  @Override
+  public String rpoplpush(String srckey, String dstkey) {
+    return jedis.rpoplpush(srckey, dstkey);
   }
 
   @Override
