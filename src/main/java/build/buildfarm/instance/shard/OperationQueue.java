@@ -24,7 +24,7 @@ import build.bazel.remote.execution.v2.Platform;
 import build.buildfarm.common.StringVisitor;
 import build.buildfarm.common.gencache.BalancedQueue;
 import build.buildfarm.common.gencache.Gencache.RedisDriver;
-import build.buildfarm.common.gencache.Gencache.ProvisionedRedisQueue;
+import build.buildfarm.common.redis.ProvisionedRedisQueue;
 import build.buildfarm.v1test.OperationQueueStatus;
 import build.buildfarm.v1test.QueueStatus;
 
@@ -261,7 +261,7 @@ public class OperationQueue {
    * queue. If there no eligible queues, an exception is thrown.
    * @note Suggested return identifier: queue.
    */
-  private BalancedQueue<RedisDriver> chooseEligibleQueue(List<Platform.Property> provisions) {
+  private BalancedQueue chooseEligibleQueue(List<Platform.Property> provisions) {
     for (ProvisionedRedisQueue provisionedQueue : queues) {
       if (provisionedQueue.isEligible(toMultimap(provisions))) {
         return provisionedQueue.queue();

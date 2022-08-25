@@ -70,6 +70,11 @@ import build.buildfarm.common.Time;
 import build.buildfarm.common.Watcher;
 import build.buildfarm.common.WorkerIndexer;
 import build.buildfarm.common.function.InterruptingRunnable;
+import build.buildfarm.common.gencache.Gencache;
+import build.buildfarm.common.gencache.Gencache.RedisDriver;
+import build.buildfarm.common.gencache.Gencache.RedisDriverPipeline;
+import build.buildfarm.common.gencache.Gencache.ScanParams;
+import build.buildfarm.common.gencache.Gencache.ScanResult;
 import build.buildfarm.common.redis.JedisClient;
 import build.buildfarm.instance.Instance;
 import build.buildfarm.instance.shard.RedisShardSubscriber.TimedWatchFuture;
@@ -90,6 +95,7 @@ import build.buildfarm.v1test.QueuedOperationMetadata;
 import build.buildfarm.v1test.RedisShardBackplaneConfig;
 import build.buildfarm.v1test.ShardWorker;
 import build.buildfarm.v1test.WorkerChange;
+import redis.clients.jedis.JedisCluster;
 
 import static java.lang.String.format;
 
@@ -131,7 +137,7 @@ public class RedisShardBackplane implements Backplane {
   private final String source; // used in operation change publication
   private final Function<Operation, Operation> onPublish;
   private final Function<Operation, Operation> onComplete;
-  private final Supplier<JedisCluster> jedisClusterFactory;
+  private final Supplier<RedisDriver> redisDriverFactory;
 
   private @Nullable InterruptingRunnable onUnsubscribe = null;
   private Thread subscriptionThread = null;
@@ -152,7 +158,8 @@ public class RedisShardBackplane implements Backplane {
       Function<Operation, Operation> onPublish,
       Function<Operation, Operation> onComplete)
       throws ConfigurationException {
-    this(config, source, onPublish, onComplete, JedisClusterFactory.create(config));
+    // TODO wtf? we'll need to see what this was before
+    this(config, source, onPublish, onComplete, redisDriverFactory.create(config));
   }
 
   public RedisShardBackplane(
@@ -160,12 +167,12 @@ public class RedisShardBackplane implements Backplane {
       String source,
       Function<Operation, Operation> onPublish,
       Function<Operation, Operation> onComplete,
-      Supplier<JedisCluster> jedisClusterFactory) {
+      Supplier<RedisDriver> redisDriverFactory) {
     this.config = config;
     this.source = source;
     this.onPublish = onPublish;
     this.onComplete = onComplete;
-    this.jedisClusterFactory = jedisClusterFactory;
+    this.redisDriverFactory = redisDriverFactory;
   }
 
   @SuppressWarnings("NullableProblems")
@@ -213,7 +220,7 @@ public class RedisShardBackplane implements Backplane {
     return null;
   }
 
-  private void scanProcessing(JedisCluster jedis, Consumer<String> onOperationName, Instant now) {
+  private void scanProcessing(RedisDriver jedis, Consumer<String> onOperationName, Instant now) {
     state.prequeue.visitDequeue(
         jedis,
         new ExecuteEntryListVisitor() {
@@ -246,7 +253,7 @@ public class RedisShardBackplane implements Backplane {
         });
   }
 
-  private void scanDispatching(JedisCluster jedis, Consumer<String> onOperationName, Instant now) {
+  private void scanDispatching(RedisDriver jedis, Consumer<String> onOperationName, Instant now) {
     state.operationQueue.visitDequeue(
         jedis,
         new QueueEntryListVisitor() {
@@ -279,7 +286,7 @@ public class RedisShardBackplane implements Backplane {
         });
   }
 
-  private void scanPrequeue(JedisCluster jedis, Consumer<String> onOperationName) {
+  private void scanPrequeue(RedisDriver jedis, Consumer<String> onOperationName) {
     state.prequeue.visit(
         jedis,
         new ExecuteEntryListVisitor() {
@@ -290,7 +297,7 @@ public class RedisShardBackplane implements Backplane {
         });
   }
 
-  private void scanQueue(JedisCluster jedis, Consumer<String> onOperationName) {
+  private void scanQueue(RedisDriver jedis, Consumer<String> onOperationName) {
     state.operationQueue.visit(
         jedis,
         new QueueEntryListVisitor() {
@@ -301,13 +308,13 @@ public class RedisShardBackplane implements Backplane {
         });
   }
 
-  private void scanDispatched(JedisCluster jedis, Consumer<String> onOperationName) {
+  private void scanDispatched(RedisDriver jedis, Consumer<String> onOperationName) {
     for (String operationName : state.dispatchedOperations.keys(jedis)) {
       onOperationName.accept(operationName);
     }
   }
 
-  private void updateWatchers(JedisCluster jedis) {
+  private void updateWatchers(RedisDriver jedis) {
     Instant now = Instant.now();
     Instant expiresAt = nextExpiresAt(now);
     Set<String> expiringChannels = Sets.newHashSet(subscriber.expiredWatchedOperationChannels(now));
@@ -367,7 +374,7 @@ public class RedisShardBackplane implements Backplane {
   }
 
   void publish(
-      JedisCluster jedis,
+      RedisDriver jedis,
       String channel,
       Instant effectiveAt,
       OperationChange.Builder operationChange) {
@@ -382,7 +389,7 @@ public class RedisShardBackplane implements Backplane {
     }
   }
 
-  void publishReset(JedisCluster jedis, Operation operation) {
+  void publishReset(RedisDriver jedis, Operation operation) {
     Instant effectiveAt = Instant.now();
     Instant expiresAt = nextExpiresAt(effectiveAt);
     publish(
@@ -404,7 +411,7 @@ public class RedisShardBackplane implements Backplane {
         .build();
   }
 
-  void publishExpiration(JedisCluster jedis, String channel, Instant effectiveAt) {
+  void publishExpiration(RedisDriver jedis, String channel, Instant effectiveAt) {
     publish(
         jedis,
         channel,
@@ -414,7 +421,7 @@ public class RedisShardBackplane implements Backplane {
   }
 
   @SuppressWarnings({"unchecked", "rawtypes"})
-  public void updateWatchedIfDone(JedisCluster jedis) {
+  public void updateWatchedIfDone(RedisDriver jedis) {
     List<String> operationChannels = subscriber.watchedOperationChannels();
     if (operationChannels.isEmpty()) {
       return;
@@ -422,7 +429,7 @@ public class RedisShardBackplane implements Backplane {
 
     Instant now = Instant.now();
     List<Map.Entry<String, Response<String>>> operations = new ArrayList(operationChannels.size());
-    JedisClusterPipeline p = jedis.pipelined();
+    RedisDriverPipeline p = jedis.pipelined();
     for (String operationName :
         operationChannels.stream()
             .map(RedisShardBackplane::parseOperationChannel)
@@ -503,12 +510,14 @@ public class RedisShardBackplane implements Backplane {
     failsafeOperationThread.start();
   }
 
+  // TODO Need to figure out how to wire up our redisDriver with our Jedis(?)Client
+  //  Presumably something like RedisClientFactory.make(redisDriverFactory.get())
   @Override
   public void start(String clientPublicName) throws IOException {
     // Construct a single redis client to be used throughout the entire backplane.
     // We wish to avoid various synchronous and error handling issues that could occur when using
     // multiple clients.
-    client = new JedisClient(jedisClusterFactory.get());
+    client = new JedisClient(redisDriverFactory.get());
 
     // Create containers that make up the backplane
     state = RedisDistributedStateCreator.create(client, config);
@@ -594,7 +603,7 @@ public class RedisShardBackplane implements Backplane {
         });
   }
 
-  private boolean removeWorkerAndPublish(JedisCluster jedis, String name, String changeJson) {
+  private boolean removeWorkerAndPublish(RedisDriver jedis, String name, String changeJson) {
     if (state.workers.remove(jedis, name)) {
       jedis.publish(config.getWorkerChannel(), changeJson);
       return true;
@@ -679,7 +688,7 @@ public class RedisShardBackplane implements Backplane {
         .collect(Collectors.toList());
   }
 
-  private void removeInvalidWorkers(JedisCluster jedis, long testedAt, List<ShardWorker> workers) {
+  private void removeInvalidWorkers(RedisDriver jedis, long testedAt, List<ShardWorker> workers) {
     if (!workers.isEmpty()) {
       for (ShardWorker worker : workers) {
         String name = worker.getEndpoint();
@@ -702,7 +711,7 @@ public class RedisShardBackplane implements Backplane {
     }
   }
 
-  private Set<String> fetchAndExpireWorkers(JedisCluster jedis, long now) {
+  private Set<String> fetchAndExpireWorkers(RedisDriver jedis, long now) {
     Set<String> returnWorkers = Sets.newConcurrentHashSet();
     ImmutableList.Builder<ShardWorker> invalidWorkers = ImmutableList.builder();
     for (Map.Entry<String, String> entry : state.workers.asMap(jedis).entrySet()) {
@@ -773,7 +782,7 @@ public class RedisShardBackplane implements Backplane {
                 jedis, asDigestStr(actionKey), json, config.getActionCacheExpire()));
   }
 
-  private void removeActionResult(JedisCluster jedis, ActionKey actionKey) {
+  private void removeActionResult(RedisDriver jedis, ActionKey actionKey) {
     state.actionCache.remove(jedis, asDigestStr(actionKey));
   }
 
@@ -810,7 +819,7 @@ public class RedisShardBackplane implements Backplane {
               List<String> keyResults = scanResult.getResult();
 
               List<Response<String>> actionResults = new ArrayList<>(keyResults.size());
-              JedisClusterPipeline p = jedis.pipelined();
+              RedisDriverPipeline p = jedis.pipelined();
               for (String key : keyResults) {
                 actionResults.add(p.get(key));
               }
@@ -909,7 +918,7 @@ public class RedisShardBackplane implements Backplane {
     }
   }
 
-  private String getOperation(JedisCluster jedis, String operationName) {
+  private String getOperation(RedisDriver jedis, String operationName) {
     return jedis.get(operationKey(operationName));
   }
 
@@ -962,7 +971,7 @@ public class RedisShardBackplane implements Backplane {
   }
 
   private void queue(
-      JedisCluster jedis,
+      RedisDriver jedis,
       String operationName,
       List<Platform.Property> provisions,
       String queueEntryJson,
@@ -1047,7 +1056,7 @@ public class RedisShardBackplane implements Backplane {
     return builder.build();
   }
 
-  private ExecuteEntry deprequeueOperation(JedisCluster jedis) throws InterruptedException {
+  private ExecuteEntry deprequeueOperation(RedisDriver jedis) throws InterruptedException {
     String executeEntryJson = state.prequeue.dequeue(jedis);
     if (executeEntryJson == null) {
       return null;
@@ -1085,7 +1094,7 @@ public class RedisShardBackplane implements Backplane {
   }
 
   private @Nullable QueueEntry dispatchOperation(
-      JedisCluster jedis, List<Platform.Property> provisions) throws InterruptedException {
+      RedisDriver jedis, List<Platform.Property> provisions) throws InterruptedException {
     String queueEntryJson = state.operationQueue.dequeue(jedis, provisions);
     if (queueEntryJson == null) {
       return null;
@@ -1188,7 +1197,7 @@ public class RedisShardBackplane implements Backplane {
     return client.call(jedis -> pollOperation(jedis, operationName, json));
   }
 
-  boolean pollOperation(JedisCluster jedis, String operationName, String dispatchedOperationJson) {
+  boolean pollOperation(RedisDriver jedis, String operationName, String dispatchedOperationJson) {
     if (state.dispatchedOperations.exists(jedis, operationName)) {
       if (!state.dispatchedOperations.insert(jedis, operationName, dispatchedOperationJson)) {
         return true;
@@ -1246,7 +1255,7 @@ public class RedisShardBackplane implements Backplane {
         });
   }
 
-  private void completeOperation(JedisCluster jedis, String operationName) {
+  private void completeOperation(RedisDriver jedis, String operationName) {
     state.dispatchedOperations.remove(jedis, operationName);
   }
 
@@ -1308,7 +1317,7 @@ public class RedisShardBackplane implements Backplane {
     return client.call(jedis -> isBlacklisted(jedis, requestMetadata));
   }
 
-  private boolean isBlacklisted(JedisCluster jedis, RequestMetadata requestMetadata) {
+  private boolean isBlacklisted(RedisDriver jedis, RequestMetadata requestMetadata) {
     boolean isActionBlocked =
         (!requestMetadata.getActionId().isEmpty()
             && state.blockedActions.exists(jedis, requestMetadata.getActionId()));

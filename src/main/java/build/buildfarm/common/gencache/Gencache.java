@@ -9,6 +9,9 @@ import com.google.common.collect.SetMultimap;
 
 import org.apache.commons.pool2.impl.GenericObjectPool;
 
+import redis.clients.jedis.ScanParams;
+import redis.clients.jedis.ScanResult;
+
 public interface Gencache {
 
   abstract class Pool<T> implements Closeable {
@@ -23,7 +26,11 @@ public interface Gencache {
 
     Map<String, Pool<RedisClient>> getClusterNodes();
 
+    ScanResult<String> scan(String var1, ScanParams var2);
+
     String get(final String key);
+
+    String set(final String key, final String value);
 
     String setex(final String key, final int seconds, final String value);
 
@@ -69,6 +76,8 @@ public interface Gencache {
     Set<String> zrange(final String key, final long start, final long stop);
 
     Object eval(final String script, final List<String> keys, final List<String> args);
+
+    Long publish(final String channel, final String message);
 
     RedisDriverPipeline pipelined();
   }
