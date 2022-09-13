@@ -690,9 +690,12 @@ public class Worker extends LoggingMain {
         return createGrpcCAS(config.getGrpc());
       case FILESYSTEM:
         FilesystemCASConfig fsCASConfig = config.getFilesystem();
+        Path cachePath = getValidFilesystemCASPath(fsCASConfig, root.toAbsolutePath());
+        System.out.println("Using worker root: " + root.toAbsolutePath());
+        System.out.println("Using cache path: " + cachePath.toAbsolutePath());
         return new ShardCASFileCache(
             remoteInputStreamFactory,
-            root.resolve(getValidFilesystemCASPath(fsCASConfig, root)),
+            cachePath,
             fsCASConfig.getMaxSizeBytes(),
             fsCASConfig.getMaxEntrySizeBytes(),
             fsCASConfig.getHexBucketLevels(),
