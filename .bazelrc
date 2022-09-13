@@ -4,3 +4,14 @@ build:fuse --define=fuse=true
 
 # Workaround for https://github.com/bazelbuild/bazel/issues/3236
 build:linux --sandbox_tmpfs_path=/tmp
+
+build:remcache --repository_cache=./bf-cache/bazel/repo
+query:remcache --repository_cache=./bf-cache/bazel/repo
+fetch:remcache --repository_cache=./bf-cache/bazel/repo
+build:remcache --disk_cache=./bf-cache/bazel/buildcache
+query:remcache --disk_cache=./bf-cache/bazel/buildcache
+fetch:remcache --disk_cache=./bf-cache/bazel/buildcache
+
+# User-specific .bazelrc
+try-import user.bazelrc
+
