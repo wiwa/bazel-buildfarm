@@ -14,16 +14,18 @@
 
 package build.buildfarm.worker;
 
-import static build.buildfarm.common.io.Utils.stat;
-
-import build.buildfarm.common.io.FileStatus;
 import java.io.IOException;
 import java.nio.file.FileStore;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 
+import build.buildfarm.common.io.FileStatus;
+
+import static build.buildfarm.common.io.Utils.stat;
+
 public final class Utils {
-  private Utils() {}
+  private Utils() {
+  }
 
   public static FileStatus statIfFound(Path path, boolean followSymlinks, FileStore fileStore) {
     try {
@@ -35,5 +37,16 @@ public final class Utils {
       // between not-found exceptions and others.
       throw new IllegalStateException(e);
     }
+  }
+
+  // As per JavaBuilder, @@ will escape @
+  public static boolean isFlagFile(String file) {
+    return file.startsWith("@") && !file.startsWith("@@");
+  }
+
+  public static String resolveFlagFiles(Path root, String arg) {
+    return isFlagFile(arg)
+        ? "@" + root.resolve(arg.substring(1)).toAbsolutePath()
+        : arg;
   }
 }
