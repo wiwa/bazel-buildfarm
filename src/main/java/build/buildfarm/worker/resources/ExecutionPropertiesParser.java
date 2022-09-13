@@ -18,10 +18,20 @@ import build.bazel.remote.execution.v2.Command;
 import build.bazel.remote.execution.v2.Platform.Property;
 import build.buildfarm.common.ExecutionProperties;
 import build.buildfarm.common.MapUtils;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.logging.FileHandler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
@@ -32,6 +42,7 @@ import org.json.simple.parser.ParseException;
  *     Buildfarm may further modify these choices based on its own configuration and constraints.
  */
 public class ExecutionPropertiesParser {
+
   /**
    * @brief Decide resource limitations for the given command.
    * @details Platform properties from specified exec_properties are taken into account when
@@ -57,6 +68,8 @@ public class ExecutionPropertiesParser {
     parser.put(ExecutionProperties.SKIP_SLEEP, ExecutionPropertiesParser::storeSkipSleep);
     parser.put(ExecutionProperties.TIME_SHIFT, ExecutionPropertiesParser::storeTimeShift);
     parser.put(ExecutionProperties.CONTAINER_IMAGE, ExecutionPropertiesParser::storeContainerImage);
+    parser.put(ExecutionProperties.PERSISTENT_WORKER_KEY, ExecutionPropertiesParser::storePersistentWorkerKey);
+    parser.put(ExecutionProperties.PERSISTENT_WORKER_COMMAND, ExecutionPropertiesParser::storePersistentWorkerCommand);
     parser.put(
         ExecutionProperties.DEBUG_BEFORE_EXECUTION,
         ExecutionPropertiesParser::storeBeforeExecutionDebug);
@@ -72,6 +85,7 @@ public class ExecutionPropertiesParser {
         .getPlatform()
         .getPropertiesList()
         .forEach((property) -> evaluateProperty(parser, limits, property));
+
     return limits;
   }
 
@@ -269,6 +283,34 @@ public class ExecutionPropertiesParser {
     limits.containerSettings.containerImage = property.getValue();
     describeChange(
         limits.containerSettings.description, "container image", property.getValue(), property);
+  }
+
+  /**
+   * @brief Stores persistentWorkerKey
+   * @details Parses and stores a String.
+   * @param limits Current limits to apply changes to.
+   * @param property The property to store.
+   */
+  private static void storePersistentWorkerKey(ResourceLimits limits, Property property) {
+    limits.persistentWorkerKey = property.getValue();
+    ArrayList<String> xs = new ArrayList<>();
+    xs.add("Hash of tool inputs for remote persistent workers");
+    describeChange(
+      xs, "persistentWorkerKey(hash of tool inputs)", property.getValue(), property);
+  }
+
+  /**
+   * @brief Stores persistentWorkerCommand
+   * @details Parses and stores a String.
+   * @param limits Current limits to apply changes to.
+   * @param property The property to store.
+   */
+  private static void storePersistentWorkerCommand(ResourceLimits limits, Property property) {
+    limits.persistentWorkerCommand = property.getValue();
+    ArrayList<String> xs = new ArrayList<>();
+    xs.add("persistentWorkerCommand");
+    describeChange(
+      xs, "persistentWorkerCommand", property.getValue(), property);
   }
 
   /**
