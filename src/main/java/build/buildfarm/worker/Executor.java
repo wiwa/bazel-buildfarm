@@ -14,14 +14,31 @@
 
 package build.buildfarm.worker;
 
-import static build.buildfarm.v1test.ExecutionPolicy.PolicyCase.WRAPPER;
-import static com.google.common.collect.Maps.uniqueIndex;
-import static com.google.protobuf.util.Durations.add;
-import static com.google.protobuf.util.Durations.compare;
-import static com.google.protobuf.util.Durations.fromSeconds;
-import static java.lang.String.format;
-import static java.util.concurrent.TimeUnit.DAYS;
-import static java.util.concurrent.TimeUnit.MICROSECONDS;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import com.github.dockerjava.api.DockerClient;
+import com.github.dockerjava.core.DockerClientBuilder;
+import com.google.common.base.Stopwatch;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.devtools.build.lib.shell.Protos.ExecutionStatistics;
+import com.google.longrunning.Operation;
+import com.google.protobuf.Any;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.Duration;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.util.Durations;
+import com.google.protobuf.util.Timestamps;
+import com.google.rpc.Code;
 
 import build.bazel.remote.execution.v2.Action;
 import build.bazel.remote.execution.v2.ActionResult;
@@ -36,32 +53,23 @@ import build.buildfarm.common.Write.NullWrite;
 import build.buildfarm.v1test.ExecutingOperationMetadata;
 import build.buildfarm.v1test.ExecutionPolicy;
 import build.buildfarm.v1test.ExecutionWrapper;
+import build.buildfarm.v1test.Tree;
 import build.buildfarm.worker.WorkerContext.IOResource;
+import build.buildfarm.worker.persistent.PersistentExecutor;
+import build.buildfarm.worker.persistent.WorkFilesContext;
 import build.buildfarm.worker.resources.ResourceLimits;
-import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.core.DockerClientBuilder;
-import com.google.common.base.Stopwatch;
-import com.google.common.collect.ImmutableList;
-import com.google.devtools.build.lib.shell.Protos.ExecutionStatistics;
-import com.google.longrunning.Operation;
-import com.google.protobuf.Any;
-import com.google.protobuf.ByteString;
-import com.google.protobuf.Duration;
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.util.Durations;
-import com.google.protobuf.util.Timestamps;
-import com.google.rpc.Code;
 import io.grpc.Deadline;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+
+import static java.lang.String.format;
+import static java.util.concurrent.TimeUnit.DAYS;
+import static java.util.concurrent.TimeUnit.MICROSECONDS;
+
+import static com.google.common.collect.Maps.uniqueIndex;
+import static com.google.protobuf.util.Durations.add;
+import static com.google.protobuf.util.Durations.compare;
+import static com.google.protobuf.util.Durations.fromSeconds;
+
+import static build.buildfarm.v1test.ExecutionPolicy.PolicyCase.WRAPPER;
 
 class Executor {
   private static final int INCOMPLETE_EXIT_CODE = -1;
@@ -76,7 +84,8 @@ class Executor {
   private boolean wasErrored = false;
 
   Executor(
-      WorkerContext workerContext, OperationContext operationContext, ExecuteActionStage owner) {
+      WorkerContext workerContext, OperationContext operationContext, ExecuteActionStage owner
+  ) {
     this.workerContext = workerContext;
     this.operationContext = operationContext;
     this.owner = owner;
@@ -198,7 +207,8 @@ class Executor {
       ResourceLimits limits,
       Iterable<ExecutionPolicy> policies,
       Duration timeout,
-      Stopwatch stopwatch)
+      Stopwatch stopwatch
+  )
       throws InterruptedException {
     /* execute command */
     logger.log(Level.FINE, "Executor: Operation " + operation.getName() + " Executing command");
@@ -219,8 +229,8 @@ class Executor {
     ImmutableList.Builder<String> arguments = ImmutableList.builder();
     Code statusCode;
     try (IOResource resource =
-        workerContext.limitExecution(
-            operationName, arguments, operationContext.command, workingDirectory)) {
+             workerContext.limitExecution(
+                 operationName, arguments, operationContext.command, workingDirectory)) {
       for (ExecutionPolicy policy : policies) {
         if (policy.getPolicyCase() == WRAPPER) {
           arguments.addAll(transformWrapper(policy.getWrapper()));
@@ -284,7 +294,8 @@ class Executor {
         "Executor(claim)",
         operationContext.queueEntry,
         ExecutionStage.Value.EXECUTING,
-        () -> {},
+        () -> {
+        },
         Deadline.after(10, DAYS));
 
     resultBuilder
@@ -412,8 +423,22 @@ class Executor {
       List<EnvironmentVariable> environmentVariables,
       ResourceLimits limits,
       Duration timeout,
-      ActionResult.Builder resultBuilder)
+      ActionResult.Builder resultBuilder
+  )
       throws IOException, InterruptedException {
+
+    StringBuilder sb = new StringBuilder();
+    sb.append("======<");
+    sb.append("Calling executeCommand with:");
+    sb.append("operationName=" + operationName);
+    sb.append("execDir=" + execDir.toAbsolutePath());
+    sb.append("arguments=" + ImmutableList.copyOf(arguments));
+    sb.append("environmentVariables=" + ImmutableList.copyOf(environmentVariables));
+    sb.append("limits.unusedProperties=" + ImmutableMap.copyOf(limits.unusedProperties));
+    sb.append("timeout=" + timeout);
+    sb.append("======>");
+    logger.fine(sb.toString());
+
     ProcessBuilder processBuilder =
         new ProcessBuilder(arguments).directory(execDir.toAbsolutePath().toFile());
 
@@ -422,28 +447,48 @@ class Executor {
     for (EnvironmentVariable environmentVariable : environmentVariables) {
       environment.put(environmentVariable.getName(), environmentVariable.getValue());
     }
-    for (Map.Entry<String, String> environmentVariable :
-        limits.extraEnvironmentVariables.entrySet()) {
-      environment.put(environmentVariable.getKey(), environmentVariable.getValue());
-    }
 
-    final Write stdoutWrite;
-    final Write stderrWrite;
-
-    if ("" != null && !"".isEmpty() && workerContext.getStreamStdout()) {
-      stdoutWrite = workerContext.getOperationStreamWrite("");
-    } else {
-      stdoutWrite = new NullWrite();
-    }
-    if ("" != null && !"".isEmpty() && workerContext.getStreamStderr()) {
-      stderrWrite = workerContext.getOperationStreamWrite("");
-    } else {
-      stderrWrite = new NullWrite();
-    }
+    environment.putAll(limits.extraEnvironmentVariables);
 
     // allow debugging before an execution
     if (limits.debugBeforeExecution) {
+      // TODO this should not be using ProcessBuilder; current it uses it like a context
       return ExecutionDebugger.performBeforeExecutionDebug(processBuilder, limits, resultBuilder);
+    }
+
+    boolean usePersistentWorker = !limits.persistentWorkerKey.isEmpty();
+
+    // boolean isJavaBuilder = arguments.contains(
+    //     "external/remote_java_tools/java_tools/JavaBuilder_deploy.jar");
+    // boolean isScalac = arguments.size() > 1 && arguments.get(0).endsWith("scalac/scalac");
+    // usePersistentWorker = usePersistentWorker || isJavaBuilder || isScalac;
+
+    if (usePersistentWorker) {
+      logger.log(Level.FINE, "");
+      logger.log(Level.FINE, "usePersistentWorker; got persistentWorkerCommand of : " + limits.persistentWorkerCommand);
+
+      Tree execTree = workerContext.getQueuedOperation(operationContext.queueEntry).getTree();
+
+      WorkFilesContext filesContext = new WorkFilesContext(
+          execDir,
+          execTree,
+          ImmutableList.copyOf(operationContext.command.getOutputPathsList()),
+          ImmutableList.copyOf(operationContext.command.getOutputFilesList()),
+          ImmutableList.copyOf(operationContext.command.getOutputDirectoriesList())
+      );
+
+      return PersistentExecutor.runOnPersistentWorker(
+          limits.persistentWorkerCommand,
+          filesContext,
+          operationName,
+          ImmutableList.copyOf(arguments),
+          ImmutableMap.copyOf(environment),
+          limits,
+          timeout,
+          resultBuilder
+      );
+    } else {
+      logger.log(Level.FINE, "don't usePersistentWorker");
     }
 
     // run the action under docker
@@ -462,6 +507,29 @@ class Executor {
 
       return DockerExecutor.runActionWithDocker(dockerClient, settings, resultBuilder);
     }
+
+    return executeCommandNormally(
+        processBuilder,
+        operationName,
+        execDir,
+        limits,
+        timeout,
+        resultBuilder
+    );
+  }
+
+  private Code executeCommandNormally(
+      ProcessBuilder processBuilder,
+      String operationName,
+      Path execDir,
+      ResourceLimits limits,
+      Duration timeout,
+      ActionResult.Builder resultBuilder
+  )
+      throws IOException, InterruptedException {
+
+    final Write stdoutWrite = new NullWrite();
+    final Write stderrWrite = new NullWrite();
 
     long startNanoTime = System.nanoTime();
     Process process;
@@ -571,5 +639,6 @@ class Executor {
     }
 
     return statusCode;
+
   }
 }
