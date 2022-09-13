@@ -214,7 +214,7 @@ public class PersistentExecutor {
   }
 
   private static ImmutableList<String> parseInitCmd(String cmdStr, ImmutableList<String> argsList) {
-    if (cmdStr.isEmpty() || !cmdStr.endsWith(PERSISTENT_WORKER_FLAG)) {
+    if (!cmdStr.endsWith(PERSISTENT_WORKER_FLAG)) {
       throw new IllegalArgumentException("parseInitCmd?[" + cmdStr + "]" + "\n" + argsList);
     }
 
