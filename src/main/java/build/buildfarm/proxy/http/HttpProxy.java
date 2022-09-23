@@ -16,11 +16,20 @@ package build.buildfarm.proxy.http;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+import build.bazel.remote.execution.v2.ActionCacheUpdateCapabilities;
+import build.bazel.remote.execution.v2.CacheCapabilities;
+import build.bazel.remote.execution.v2.DigestFunction;
+import build.bazel.remote.execution.v2.ExecutionCapabilities;
+import build.bazel.remote.execution.v2.ServerCapabilities;
+import build.bazel.remote.execution.v2.SymlinkAbsolutePathStrategy;
 import build.buildfarm.common.LoggingMain;
 import com.google.auth.Credentials;
 import com.google.devtools.common.options.OptionsParser;
+
+import build.buildfarm.common.Size;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.util.TransmitStatusRuntimeExceptionInterceptor;
 import java.io.IOException;
 import java.net.URI;
@@ -37,6 +46,25 @@ public class HttpProxy extends LoggingMain {
   // collected, which would cause us to loose their configuration.
   private static final Logger nettyLogger = Logger.getLogger("io.grpc.netty");
   public static final Logger logger = Logger.getLogger(HttpProxy.class.getName());
+
+  // TODO variable digest function?
+  // Copy-pasted from AbstractServerInstance capabilities + no exec
+  public static final ServerCapabilities capabilities = ServerCapabilities.newBuilder()
+      .setCacheCapabilities(CacheCapabilities.newBuilder()
+          .addDigestFunctions(DigestFunction.Value.SHA256)
+          .setActionCacheUpdateCapabilities(
+              ActionCacheUpdateCapabilities.newBuilder().setUpdateEnabled(true)
+          )
+          .setMaxBatchTotalSizeBytes(Size.mbToBytes(4))
+          .setSymlinkAbsolutePathStrategy(SymlinkAbsolutePathStrategy.Value.DISALLOWED)
+          .build()
+      )
+      .setExecutionCapabilities(
+          ExecutionCapabilities.newBuilder()
+          .setExecEnabled(false)
+          .build()
+      )
+      .build();
 
   private final Server server;
 
@@ -57,6 +85,8 @@ public class HttpProxy extends LoggingMain {
             creds);
     server =
         serverBuilder
+            .addService(ProtoReflectionService.newInstance())
+            .addService(new HttpProxyCapabilitiesService())
             .addService(new ActionCacheService(simpleBlobStore))
             .addService(
                 new ContentAddressableStorageService(
