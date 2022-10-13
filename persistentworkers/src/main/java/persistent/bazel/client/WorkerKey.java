@@ -14,20 +14,19 @@ import java.util.SortedMap;
  * Comments also ripped off, credits to the Bazel Authors.
  * Has less dependencies, but only ProtoBuf and non-multiplex support.
  *
- * I wish I could just make `data class` or `case class`.
- *
  * Data container that uniquely identifies a kind of worker process.
  */
 public final class WorkerKey {
-  /** Adding the cmd here instead of having multiple pools */
+
   private final ImmutableList<String> cmd;
-  /** Build options. */
+
   private final ImmutableList<String> args;
-  /** Environment variables. */
+
   private final ImmutableMap<String, String> env;
-  /** Execution root of Bazel process. */
+
   private final Path execRoot;
-  /** Mnemonic of the worker. */
+
+  /** Mnemonic of the worker; but we don't actually have the real action mnemonic */
   private final String mnemonic;
 
   /**
@@ -36,24 +35,25 @@ public final class WorkerKey {
    * methods.
    */
   private final HashCode workerFilesCombinedHash;
+
   /** Worker files with the corresponding hash code.
    *
    *  These paths should be stable, so use relative paths
    *  (unless its a universal absolute path like /tmp/my_tools/...)
    * */
   private final SortedMap<Path, HashCode> workerFilesWithHashes;
+
   /** If true, the workers run inside a sandbox. */
   private final boolean sandboxed;
+
   /** If true, the workers for this key are able to cancel work requests. */
   private final boolean cancellable;
+
   /**
    * Cached value for the hash of this key, because the value is expensive to calculate
    * (ImmutableMap and ImmutableList do not cache their hashcodes).
    */
   private final int hash;
-
-  // Operation execRoot which created this WorkerKey
-  public final Path opRoot;
 
   public WorkerKey(
       ImmutableList<String> cmd,
@@ -64,8 +64,7 @@ public final class WorkerKey {
       HashCode workerFilesCombinedHash,
       SortedMap<Path, HashCode> workerFilesWithHashes,
       boolean sandboxed,
-      boolean cancellable,
-      Path opRoot
+      boolean cancellable
   ) {
     // Part of hash
     this.cmd = Preconditions.checkNotNull(cmd);
@@ -80,8 +79,6 @@ public final class WorkerKey {
     this.workerFilesWithHashes = Preconditions.checkNotNull(workerFilesWithHashes);
 
     this.hash = calculateHashCode();
-
-    this.opRoot = opRoot;
   }
 
   /** Getter function for variable cmd. */

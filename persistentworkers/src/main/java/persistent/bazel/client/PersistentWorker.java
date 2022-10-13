@@ -5,7 +5,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -15,20 +14,25 @@ import com.google.common.hash.HashCode;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 
-import org.apache.commons.io.IOUtils;
-import org.apache.commons.pool2.PooledObject;
-import org.apache.commons.pool2.impl.DefaultPooledObject;
-
 import persistent.bazel.processes.ProtoWorkerRW;
 import persistent.common.Worker;
 import persistent.common.processes.ProcessWrapper;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-
 /**
- * Takes care of the underlying process's environment, i.e. directories, files
+ * Wraps a persistent worker process, using ProtoWorkerRW.
+ * The process is created with a working directory under the execRoot of the WorkerKey.
+ * <p>
+ * Maintains the metadata of the underlying process,
+ * i.e. its WorkerKey and the command used to run it.
+ * <p>
+ * Also takes care of the underlying process's environment, i.e. directories and files.
  */
 public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
+
+  /**
+   * Services supporting being run as persistent workers need to parse this flag
+   */
+  public static final String PERSISTENT_WORKER_FLAG = "--persistent_worker";
 
   private static final Logger logger = Logger.getLogger(PersistentWorker.class.getName());
 
@@ -88,6 +92,15 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
         : Optional.empty();
   }
 
+  public String getStdErr() {
+    try {
+      return this.workerRW.getProcessWrapper().getErrorString();
+    } catch (IOException e) {
+      e.printStackTrace();
+      return "getStdErr Exception: " + e;
+    }
+  }
+
   public String flushStdErr() {
     try {
       return this.workerRW.getProcessWrapper().flushErrorString();
@@ -131,89 +144,11 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
       String stderr = workerRW.getProcessWrapper().getErrorString();
       sb.append(stderr);
       logger.log(Level.SEVERE, sb.toString());
-
-      // // TODO might be able to remove this; scared that stdout might crash.
-      // StringBuilder sb2 = new StringBuilder();
-      // sb2.append("\nlogBadResponse(out)");
-      // sb2.append("\n\tProcess stdout: ");
-      // IOUtils.readLines(workerRW.getProcessWrapper().getStdOut(), UTF_8).forEach(s -> {
-      //   sb2.append(s);
-      //   sb2.append("\n\t");
-      // });
-      // logger.log(Level.SEVERE, sb2.toString());
     }
   }
 
   @Override
   public void destroy() {
     this.workerRW.getProcessWrapper().destroy();
-  }
-
-  public static abstract class Supervisor extends persistent.common.Supervisor<WorkerKey, PersistentWorker> {
-
-    public static Supervisor simple() {
-      return new Supervisor() {
-        @Override
-        public PersistentWorker create(WorkerKey workerKey) throws Exception {
-          return new PersistentWorker(workerKey, "");
-        }
-      };
-    }
-
-    public abstract PersistentWorker create(WorkerKey workerKey) throws Exception;
-
-    @Override
-    public PooledObject<PersistentWorker> wrap(PersistentWorker persistentWorker) {
-      return new DefaultPooledObject<>(persistentWorker);
-    }
-
-    @Override
-    public boolean validateObject(WorkerKey key, PooledObject<PersistentWorker> p) {
-      PersistentWorker worker = p.getObject();
-      Optional<Integer> exitValue = worker.getExitValue();
-      if (exitValue.isPresent()) {
-        String errorStr;
-        try {
-          String err = worker.workerRW.getProcessWrapper().getErrorString();
-          errorStr = "Stderr:\n" + err;
-        } catch (Exception e) {
-          errorStr = "Couldn't read Stderr: " + e;
-        }
-        String msg = String.format(
-            "Worker unexpectedly died with exit code %d. Key:\n%s\n%s",
-            exitValue.get(),
-            key,
-            errorStr
-        );
-        logger.log(Level.SEVERE, msg);
-        return false;
-      }
-      boolean filesChanged =
-          !key.getWorkerFilesCombinedHash().equals(worker.key.getWorkerFilesCombinedHash());
-
-      if (filesChanged) {
-        StringBuilder msg = new StringBuilder();
-        msg.append("Worker can no longer be used, because its files have changed on disk:\n");
-        msg.append(key);
-        TreeSet<Path> files = new TreeSet<>();
-        files.addAll(key.getWorkerFilesWithHashes().keySet());
-        files.addAll(worker.key.getWorkerFilesWithHashes().keySet());
-        for (Path file : files) {
-          HashCode oldHash = worker.key.getWorkerFilesWithHashes().get(file);
-          HashCode newHash = key.getWorkerFilesWithHashes().get(file);
-          if (!oldHash.equals(newHash)) {
-            msg.append("\n")
-                .append(file.normalize())
-                .append(": ")
-                .append(oldHash != null ? oldHash : "<none>")
-                .append(" -> ")
-                .append(newHash != null ? newHash : "<none>");
-          }
-        }
-        logger.log(Level.SEVERE, msg.toString());
-      }
-
-      return !filesChanged;
-    }
   }
 }

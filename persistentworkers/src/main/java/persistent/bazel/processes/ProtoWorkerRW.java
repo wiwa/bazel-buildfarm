@@ -18,7 +18,12 @@ import persistent.common.processes.ProcessWrapper;
  * Based off Google's ProtoWorkerProtocol
  * Slightly generified to encapsulate read/writes
  * Should be used by both the PersistentWorker (client-side)
- *  and the WorkRequestHandler (persistent-process-side)
+ *  and the WorkRequestHandler (in the persistent worker process)
+ *
+ * Writes WorkRequest protos to the persistent worker
+ * Reads WorkResponse protos from the persistent worker
+ *
+ * Static methods also expose some useful(?) utilities
  *
  * TODO: What happens to input/output streams when the process dies?
  *  Presumably, it is closed (as per tests).
@@ -83,7 +88,7 @@ public class ProtoWorkerRW {
 
   public static void waitForInput(Supplier<Boolean> liveCheck, InputStream inputStream) throws IOException, InterruptedException {
     String workerDeathMsg = "Worker process for died while waiting for response";
-    // TODO don't spin
+    // TODO can we do better than spinning? i.e. condition variable?
     while (inputAvailable(inputStream, workerDeathMsg) == 0) {
       Thread.sleep(10);
       if (!liveCheck.get()) {

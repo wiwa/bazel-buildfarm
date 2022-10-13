@@ -6,7 +6,7 @@ import persistent.common.CtxAround.Id;
 
 /**
  * Manages worker lifetimes and acts as the mediator between executors and workers.
- * It also manages initi
+ * It also manages pre-work initialization and post-work cleanup.
  *
  * @param <K> worker key type
  * @param <I> request type
@@ -45,6 +45,10 @@ public abstract class Coordinator<K, I, O, W extends Worker<I, O>, CI extends Ct
     return new SimpleCoordinator<>(workerPool);
   }
 
+  /**
+   * A Coordinator which doesn't have any extra metadata for the request and response types
+   * Its pool type is also filled in as an ObjectPool interface
+   */
   public static class SimpleCoordinator<K, I, O, W extends Worker<I, O>> extends Coordinator<K, I, O, W, Id<I>, Id<O>, ObjectPool<K, W>> {
 
     public SimpleCoordinator(ObjectPool<K, W> workerPool) {

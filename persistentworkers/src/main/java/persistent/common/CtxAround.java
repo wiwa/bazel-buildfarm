@@ -20,5 +20,10 @@ public interface CtxAround<T> {
     public static <T> Id<T> of(T value) {
       return new Id<>(value);
     }
+
+    @Override
+    public boolean equals(Object obj) {
+      return obj.equals(this.value);
+    }
   }
 }

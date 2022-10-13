@@ -8,7 +8,7 @@ java_library(
     "//src/main/java/build/buildfarm/instance/stub",
     "//src/main/java/build/buildfarm/worker/resources",
     "//src/main/protobuf:build_buildfarm_v1test_buildfarm_java_proto",
-    "//third_party/bazel/src/main/protobuf:worker_protocol_java_proto",
+    "@bazel_tools//src/main/protobuf:worker_protocol_java_proto",
     "@maven//:com_google_code_gson_gson",
     "@maven//:com_google_guava_guava",
     "@maven//:com_google_protobuf_protobuf_java",

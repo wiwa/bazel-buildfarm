@@ -28,16 +28,18 @@ public class AdderTest {
 
   @SuppressWarnings("CheckReturnValue")
   @Test
-  public void simpleTestWorks() throws Exception {
+  public void canInitAndDoWorkWithoutDying() throws Exception {
     ProcessWrapper pw;
     try (JavaProcessWrapper jpw = spawnAdderProcess()) {
       pw = jpw;
       ProtoWorkerRW rw = new ProtoWorkerRW(jpw);
       rw.write(WorkerProtocol.WorkRequest.newBuilder().addArguments("1").addArguments("3").build());
+
       assertThat(rw.waitAndRead().getOutput()).isEqualTo("4");
       assertThat(jpw.isAlive()).isTrue();
     }
     assertThat(pw).isNotNull();
+
     pw.waitFor();
     assertThat(pw.isAlive()).isFalse();
     assertThat(pw.exitValue()).isNotEqualTo(0);
@@ -50,6 +52,7 @@ public class AdderTest {
       ProtoWorkerRW rw = new ProtoWorkerRW(jpw);
       rw.write(WorkerProtocol.WorkRequest.newBuilder().addArguments("stop!").build());
       jpw.waitFor();
+
       assertThat(jpw.isAlive()).isFalse();
       assertThat(jpw.exitValue()).isEqualTo(0);
     }
@@ -62,6 +65,7 @@ public class AdderTest {
       ProtoWorkerRW rw = new ProtoWorkerRW(jpw);
       rw.write(WorkerProtocol.WorkRequest.newBuilder().addArguments("bad request").build());
       jpw.waitFor();
+
       assertThat(jpw.isAlive()).isFalse();
       assertThat(jpw.exitValue()).isEqualTo(2);
     }

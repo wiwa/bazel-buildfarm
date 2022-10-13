@@ -12,7 +12,8 @@ import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 
 /**
- * Persistence-compatible tools should instantiate this class
+ * Persistent-worker-compatible tools should instantiate this class
+ * Reads WorkRequests, handles them, and returns WorkResponses -- forever
  */
 public class WorkRequestHandler {
 

@@ -21,6 +21,13 @@ import static java.nio.file.StandardOpenOption.WRITE;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+/**
+ * Wraps a process, giving it a (possible different) working directory and environment variables.
+ * Redirects stderr to a file under its working dir using a random uuid, i.e. "{{randomUUID()}}.stderr"
+ * Exposes its stdin as OutputStream and stdout as InputStream.
+ *
+ * Constructor immediately starts a process and checks isAlive() right after.
+ */
 public class ProcessWrapper implements Closeable {
 
   private static Logger logger = Logger.getLogger(ProcessWrapper.class.getName());
@@ -32,6 +39,8 @@ public class ProcessWrapper implements Closeable {
   private final ImmutableList<String> args;
 
   private final Path errorFile;
+
+  private final UUID uuid;
 
   public ProcessWrapper(Path workDir, ImmutableList<String> args) throws IOException {
     this(workDir, args, new HashMap<>());
@@ -46,8 +55,9 @@ public class ProcessWrapper implements Closeable {
         Files.isDirectory(workDir),
         "Process workDir must be a directory, got: " + workDir
     );
+    this.uuid = UUID.randomUUID();
 
-    this.errorFile = this.workRoot.resolve(UUID.randomUUID() + ".stderr");
+    this.errorFile = this.workRoot.resolve(this.uuid + ".stderr");
 
     logger.log(Level.FINE, "Starting Process:");
     logger.log(Level.FINE, "\tcmd: " + this.args);
