@@ -15,15 +15,13 @@ import com.google.common.hash.HashCode;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
 import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.pool2.PooledObject;
 import org.apache.commons.pool2.impl.DefaultPooledObject;
 
 import persistent.bazel.processes.ProtoWorkerRW;
+import persistent.common.CommonsSupervisor;
 import persistent.common.Worker;
 import persistent.common.processes.ProcessWrapper;
-
-import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * Takes care of the underlying process's environment, i.e. directories, files
@@ -149,7 +147,7 @@ public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
     this.workerRW.getProcessWrapper().destroy();
   }
 
-  public static abstract class Supervisor extends persistent.common.Supervisor<WorkerKey, PersistentWorker> {
+  public static abstract class Supervisor extends CommonsSupervisor<WorkerKey, PersistentWorker> {
 
     public static Supervisor simple() {
       return new Supervisor() {
