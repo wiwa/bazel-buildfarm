@@ -21,7 +21,8 @@ public class WorkerUtils {
         HashCode.fromInt(0),
         ImmutableSortedMap.of(),
         false,
-        false
+        false,
+        execDir
     );
   }
 }

@@ -3,8 +3,8 @@ java_library(
     srcs = glob(["**/*.java"]),
     visibility = ["//visibility:public"],
     deps = [
-        "//third_party/bazel/src/main/protobuf:worker_protocol_java_proto",
         "//persistentworkers/src/main/java/persistent/common:persistent-common",
+        "@bazel_tools//src/main/protobuf:worker_protocol_java_proto",
         "@maven//:org_apache_commons_commons_pool2",
         "@maven//:com_github_pcj_google_options",
         "@maven//:com_google_guava_guava",
