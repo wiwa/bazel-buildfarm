@@ -26,10 +26,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import lombok.extern.java.Log;
 
-@Log
 public class ExecuteActionStage extends SuperscalarPipelineStage {
+  private static final Logger logger = Logger.getLogger(ExecuteActionStage.class.getName());
   private static final Gauge executionSlotUsage =
       Gauge.build().name("execution_slot_usage").help("Execution slot Usage.").register();
   private static final Histogram executionTime =
@@ -43,6 +42,7 @@ public class ExecuteActionStage extends SuperscalarPipelineStage {
   private final Set<Thread> executors = Sets.newHashSet();
   private final AtomicInteger executorClaims = new AtomicInteger(0);
   private final BlockingQueue<OperationContext> queue = new ArrayBlockingQueue<>(1);
+  private volatile int size = 0;
 
   public ExecuteActionStage(
       WorkerContext workerContext, PipelineStage output, PipelineStage error) {
@@ -62,7 +62,7 @@ public class ExecuteActionStage extends SuperscalarPipelineStage {
         try {
           workerContext.destroyExecDir(operationContext.execDir);
         } catch (IOException e) {
-          log.log(
+          logger.log(
               Level.SEVERE, "error while destroying action root " + operationContext.execDir, e);
         } finally {
           output.put(operationContext);
@@ -73,7 +73,7 @@ public class ExecuteActionStage extends SuperscalarPipelineStage {
 
   @Override
   protected Logger getLogger() {
-    return log;
+    return logger;
   }
 
   @Override
@@ -97,25 +97,24 @@ public class ExecuteActionStage extends SuperscalarPipelineStage {
           "tried to remove unknown executor thread for " + operationName);
     }
     releaseClaim(operationName, claims);
-    int slotUsage = executorClaims.addAndGet(-claims);
-    executionSlotUsage.set(slotUsage);
-    return slotUsage;
+    return executorClaims.addAndGet(-claims);
   }
 
   public void releaseExecutor(
       String operationName, int claims, long usecs, long stallUSecs, int exitCode) {
-    int slotUsage = removeAndRelease(operationName, claims);
+    size = removeAndRelease(operationName, claims);
     executionTime.observe(usecs / 1000.0);
     executionStallTime.observe(stallUSecs / 1000.0);
+    executionSlotUsage.set(size);
     logComplete(
         operationName,
         usecs,
         stallUSecs,
-        String.format("exit code: %d, %s", exitCode, getUsage(slotUsage)));
+        String.format("exit code: %d, %s", exitCode, getUsage(size)));
   }
 
   public int getSlotUsage() {
-    return executorClaims.get();
+    return size;
   }
 
   @Override
@@ -139,9 +138,8 @@ public class ExecuteActionStage extends SuperscalarPipelineStage {
 
     synchronized (this) {
       executors.add(executorThread);
-      int slotUsage = executorClaims.addAndGet(limits.cpu.claimed);
-      executionSlotUsage.set(slotUsage);
-      logStart(operationContext.operation.getName(), getUsage(slotUsage));
+      size = executorClaims.addAndGet(limits.cpu.claimed);
+      logStart(operationContext.operation.getName(), getUsage(size));
       executorThread.start();
     }
   }

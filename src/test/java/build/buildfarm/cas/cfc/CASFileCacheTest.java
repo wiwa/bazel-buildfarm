@@ -38,7 +38,6 @@ import build.bazel.remote.execution.v2.RequestMetadata;
 import build.buildfarm.cas.ContentAddressableStorage;
 import build.buildfarm.cas.ContentAddressableStorage.Blob;
 import build.buildfarm.cas.DigestMismatchException;
-import build.buildfarm.cas.cfc.CASFileCache.CancellableOutputStream;
 import build.buildfarm.cas.cfc.CASFileCache.Entry;
 import build.buildfarm.cas.cfc.CASFileCache.PutDirectoryException;
 import build.buildfarm.cas.cfc.CASFileCache.StartupCacheResults;
@@ -536,49 +535,6 @@ class CASFileCacheTest {
   }
 
   @Test
-  public void cancelDischargesWriteSize() throws IOException {
-    ByteString content = ByteString.copyFromUtf8("Hello, World");
-    Digest digest = DIGEST_UTIL.compute(content);
-
-    Write cancellingWrite = getWrite(digest);
-    OutputStream out = cancellingWrite.getOutput(1, SECONDS, () -> {});
-    assertThat(out).isInstanceOf(CancellableOutputStream.class);
-    CancellableOutputStream cancelOut = (CancellableOutputStream) out;
-    assertThat(fileCache.size()).isEqualTo(digest.getSizeBytes());
-    cancelOut.cancel();
-    assertThat(fileCache.size()).isEqualTo(0);
-    assertThat(cancellingWrite.getCommittedSize()).isEqualTo(0);
-    assertThat(cancellingWrite.isComplete()).isFalse();
-  }
-
-  @Test
-  public void cancelNegatesProgressAndCanRestart() throws IOException {
-    ByteString content = ByteString.copyFromUtf8("Hello, World");
-    Digest digest = DIGEST_UTIL.compute(content);
-
-    Write cancellingWrite = getWrite(digest);
-    AtomicBoolean notified = new AtomicBoolean(false);
-    cancellingWrite.getFuture().addListener(() -> notified.set(true), directExecutor());
-    OutputStream out = cancellingWrite.getOutput(1, SECONDS, () -> {});
-    assertThat(out).isInstanceOf(CancellableOutputStream.class);
-    CancellableOutputStream cancelOut = (CancellableOutputStream) out;
-    assertThat(fileCache.size()).isEqualTo(digest.getSizeBytes());
-    content.substring(0, 6).writeTo(out);
-    assertThat(cancellingWrite.getCommittedSize()).isEqualTo(6);
-    assertThat(cancellingWrite.isComplete()).isFalse();
-    cancelOut.cancel();
-    assertThat(cancellingWrite.getCommittedSize()).isEqualTo(0);
-    assertThat(cancellingWrite.isComplete()).isFalse();
-    try (OutputStream restartedOut = cancellingWrite.getOutput(1, SECONDS, () -> {})) {
-      content.writeTo(restartedOut);
-    }
-    assertThat(notified.get()).isTrue();
-    assertThat(fileCache.size()).isEqualTo(digest.getSizeBytes());
-    assertThat(cancellingWrite.getCommittedSize()).isEqualTo(digest.getSizeBytes());
-    assertThat(cancellingWrite.isComplete()).isTrue();
-  }
-
-  @Test
   public void incompleteWriteFileIsResumed() throws IOException {
     ByteString content = ByteString.copyFromUtf8("Hello, World");
     Digest digest = DIGEST_UTIL.compute(content);
@@ -594,12 +550,7 @@ class CASFileCacheTest {
     write.getFuture().addListener(() -> notified.set(true), directExecutor());
     assertThat(write.getCommittedSize()).isEqualTo(6);
     try (OutputStream out = write.getOutput(1, SECONDS, () -> {})) {
-      content.substring(6, 9).writeTo(out);
-    }
-    // ensure that we can continue via a full call to getOutput
-    assertThat(write.getCommittedSize()).isEqualTo(9);
-    try (OutputStream out = write.getOutput(1, SECONDS, () -> {})) {
-      content.substring(9).writeTo(out);
+      content.substring(6).writeTo(out);
     }
     assertThat(notified.get()).isTrue();
     assertThat(write.getCommittedSize()).isEqualTo(digest.getSizeBytes());
@@ -630,7 +581,6 @@ class CASFileCacheTest {
     try (OutputStream secondOut = write.getOutput(1, SECONDS, () -> {})) {
       assertThat(writeClosed.get()).isTrue();
     }
-    write.reset(); // ensure that the output stream is closed
   }
 
   @Test
@@ -647,7 +597,6 @@ class CASFileCacheTest {
     firstOut.get().close();
     assertThat(secondOut.isDone()).isTrue();
     secondOut.get().close();
-    write.reset(); // ensure that the output stream is closed
   }
 
   @Test(expected = DigestMismatchException.class)
@@ -691,41 +640,6 @@ class CASFileCacheTest {
     assertThat(write.isComplete()).isTrue();
   }
 
-  class UnsupportedWrite implements Write {
-    @Override
-    public long getCommittedSize() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public boolean isComplete() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public FeedbackOutputStream getOutput(
-        long deadlineAfter, TimeUnit deadlineAfterUnits, Runnable onReadyHandler)
-        throws IOException {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public ListenableFuture<FeedbackOutputStream> getOutputFuture(
-        long deadlineAfter, TimeUnit deadlineAfterUnits, Runnable onReadyHandler) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void reset() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public ListenableFuture<Long> getFuture() {
-      throw new UnsupportedOperationException();
-    }
-  }
-
   @Test
   public void expireInterruptCausesExpirySequenceHalt() throws IOException, InterruptedException {
     Blob expiringBlob;
@@ -740,8 +654,18 @@ class CASFileCacheTest {
 
     // set the delegate to throw interrupted on write output creation
     Write interruptingWrite =
-        new UnsupportedWrite() {
+        new Write() {
           boolean canReset = false;
+
+          @Override
+          public long getCommittedSize() {
+            throw new UnsupportedOperationException();
+          }
+
+          @Override
+          public boolean isComplete() {
+            throw new UnsupportedOperationException();
+          }
 
           @Override
           public FeedbackOutputStream getOutput(
@@ -752,10 +676,21 @@ class CASFileCacheTest {
           }
 
           @Override
+          public ListenableFuture<FeedbackOutputStream> getOutputFuture(
+              long deadlineAfter, TimeUnit deadlineAfterUnits, Runnable onReadyHandler) {
+            throw new UnsupportedOperationException();
+          }
+
+          @Override
           public void reset() {
             if (!canReset) {
               throw new UnsupportedOperationException();
             }
+          }
+
+          @Override
+          public ListenableFuture<Long> getFuture() {
+            throw new UnsupportedOperationException();
           }
         };
     when(delegate.getWrite(eq(expiringDigest), any(UUID.class), any(RequestMetadata.class)))
@@ -773,49 +708,6 @@ class CASFileCacheTest {
 
     verify(delegate, times(1))
         .getWrite(eq(expiringDigest), any(UUID.class), any(RequestMetadata.class));
-    assertThat(storage).isEmpty();
-  }
-
-  @Test
-  public void delegateWriteCompleteIsNotAnError() throws IOException, InterruptedException {
-    Blob expiringBlob;
-    try (ByteString.Output out = ByteString.newOutput(1024)) {
-      for (int i = 0; i < 1024; i++) {
-        out.write(0);
-      }
-      expiringBlob = new Blob(out.toByteString(), DIGEST_UTIL);
-      fileCache.put(expiringBlob);
-    }
-    Digest expiringDigest = expiringBlob.getDigest();
-
-    // set the delegate to throw on stream create, indicate write complete after
-    Write completingWrite =
-        new UnsupportedWrite() {
-          boolean completed = false;
-
-          @Override
-          public FeedbackOutputStream getOutput(
-              long deadlineAfter, TimeUnit deadlineAfterUnits, Runnable onReadyHandler)
-              throws IOException {
-            completed = true;
-            throw new IOException("indicates already complete");
-          }
-
-          @Override
-          public boolean isComplete() {
-            return completed;
-          }
-        };
-    when(delegate.getWrite(eq(expiringDigest), any(UUID.class), any(RequestMetadata.class)))
-        .thenReturn(completingWrite);
-
-    Blob blob = new Blob(ByteString.copyFromUtf8("Hello, World"), DIGEST_UTIL);
-    fileCache.put(blob);
-
-    verify(delegate, times(1))
-        .getWrite(eq(expiringDigest), any(UUID.class), any(RequestMetadata.class));
-    assertThat(completingWrite.isComplete()).isTrue();
-    assertThat(storage.keySet()).containsExactly(blob.getDigest().getHash());
   }
 
   void decrementReference(Path path) throws IOException, InterruptedException {
@@ -965,7 +857,6 @@ class CASFileCacheTest {
     int remaining = content.size() - 6;
     assertThat(in.read(buf, 6, remaining)).isEqualTo(remaining);
     assertThat(ByteString.copyFrom(buf)).isEqualTo(content);
-    in.close();
   }
 
   @Test

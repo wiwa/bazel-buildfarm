@@ -31,10 +31,9 @@ import com.google.protobuf.Timestamp;
 import com.google.protobuf.util.Timestamps;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import lombok.extern.java.Log;
 
-@Log
 public class MatchStage extends PipelineStage {
+  private static final Logger logger = Logger.getLogger(MatchStage.class.getName());
   private boolean inGracefulShutdown = false;
 
   public MatchStage(WorkerContext workerContext, PipelineStage output, PipelineStage error) {
@@ -123,7 +122,7 @@ public class MatchStage extends PipelineStage {
 
   @Override
   protected Logger getLogger() {
-    return log;
+    return logger;
   }
 
   @Override

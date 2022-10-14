@@ -14,14 +14,11 @@
 
 package build.buildfarm.instance.shard;
 
-import static build.buildfarm.cas.ContentAddressableStorage.NOT_FOUND;
-import static build.buildfarm.cas.ContentAddressableStorage.OK;
 import static build.buildfarm.common.Actions.asExecutionStatus;
 import static build.buildfarm.common.Actions.checkPreconditionFailure;
 import static build.buildfarm.common.Actions.invalidActionVerboseMessage;
 import static build.buildfarm.common.Errors.VIOLATION_TYPE_INVALID;
 import static build.buildfarm.common.Errors.VIOLATION_TYPE_MISSING;
-import static build.buildfarm.common.config.Backplane.BACKPLANE_TYPE.SHARD;
 import static build.buildfarm.instance.shard.Util.SHARD_IS_RETRIABLE;
 import static build.buildfarm.instance.shard.Util.correctMissingBlob;
 import static com.google.common.base.Preconditions.checkState;
@@ -47,7 +44,6 @@ import static net.javacrumbs.futureconverter.java8guava.FutureConverter.toListen
 
 import build.bazel.remote.execution.v2.Action;
 import build.bazel.remote.execution.v2.ActionResult;
-import build.bazel.remote.execution.v2.BatchReadBlobsResponse.Response;
 import build.bazel.remote.execution.v2.Command;
 import build.bazel.remote.execution.v2.Digest;
 import build.bazel.remote.execution.v2.Directory;
@@ -60,8 +56,6 @@ import build.bazel.remote.execution.v2.Platform;
 import build.bazel.remote.execution.v2.Platform.Property;
 import build.bazel.remote.execution.v2.RequestMetadata;
 import build.bazel.remote.execution.v2.ResultsCachePolicy;
-import build.buildfarm.actioncache.ActionCache;
-import build.buildfarm.actioncache.ShardActionCache;
 import build.buildfarm.backplane.Backplane;
 import build.buildfarm.common.CasIndexResults;
 import build.buildfarm.common.DigestUtil;
@@ -74,7 +68,6 @@ import build.buildfarm.common.TreeIterator;
 import build.buildfarm.common.TreeIterator.DirectoryEntry;
 import build.buildfarm.common.Watcher;
 import build.buildfarm.common.Write;
-import build.buildfarm.common.config.BuildfarmConfigs;
 import build.buildfarm.common.grpc.UniformDelegateServerCallStreamObserver;
 import build.buildfarm.instance.Instance;
 import build.buildfarm.instance.MatchListener;
@@ -90,6 +83,7 @@ import build.buildfarm.v1test.QueueEntry;
 import build.buildfarm.v1test.QueueStatus;
 import build.buildfarm.v1test.QueuedOperation;
 import build.buildfarm.v1test.QueuedOperationMetadata;
+import build.buildfarm.v1test.ShardInstanceConfig;
 import build.buildfarm.v1test.Tree;
 import com.github.benmanes.caffeine.cache.AsyncCache;
 import com.github.benmanes.caffeine.cache.Cache;
@@ -158,10 +152,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.annotation.Nullable;
 import javax.naming.ConfigurationException;
-import lombok.extern.java.Log;
 
-@Log
 public class ShardInstance extends AbstractServerInstance {
+  private static final Logger logger = Logger.getLogger(ShardInstance.class.getName());
 
   private static final ListenableFuture<Void> IMMEDIATE_VOID_FUTURE = Futures.immediateFuture(null);
 
@@ -210,7 +203,7 @@ public class ShardInstance extends AbstractServerInstance {
   private final Runnable onStop;
   private final long maxEntrySizeBytes;
   private final Backplane backplane;
-  private final ActionCache actionCache;
+  private final ReadThroughActionCache readThroughActionCache;
   private final RemoteInputStreamFactory remoteInputStreamFactory;
   private final com.google.common.cache.LoadingCache<String, Instance> workerStubs;
   private final Thread dispatchedMonitor;
@@ -242,26 +235,37 @@ public class ShardInstance extends AbstractServerInstance {
   private boolean stopped = true;
   private final Thread prometheusMetricsThread;
 
-  private static BuildfarmConfigs configs = BuildfarmConfigs.getInstance();
-
   // TODO: move to config
   private static final Duration queueTimeout = Durations.fromSeconds(60);
 
-  private static Backplane createBackplane(String identifier) throws ConfigurationException {
-    if (configs.getBackplane().getType().equals(SHARD)) {
-      return new RedisShardBackplane(
-          identifier, ShardInstance::stripOperation, ShardInstance::stripQueuedOperation);
-    } else {
-      throw new IllegalArgumentException("Shard Backplane not set in config");
+  private static Backplane createBackplane(ShardInstanceConfig config, String identifier)
+      throws ConfigurationException {
+    ShardInstanceConfig.BackplaneCase backplaneCase = config.getBackplaneCase();
+    switch (backplaneCase) {
+      default:
+      case BACKPLANE_NOT_SET:
+        throw new IllegalArgumentException("Shard Backplane not set in config");
+      case REDIS_SHARD_BACKPLANE_CONFIG:
+        return new RedisShardBackplane(
+            config.getRedisShardBackplaneConfig(),
+            identifier,
+            ShardInstance::stripOperation,
+            ShardInstance::stripQueuedOperation);
     }
   }
 
-  public ShardInstance(String name, String identifier, DigestUtil digestUtil, Runnable onStop)
+  public ShardInstance(
+      String name,
+      String identifier,
+      DigestUtil digestUtil,
+      ShardInstanceConfig config,
+      Runnable onStop)
       throws InterruptedException, ConfigurationException {
     this(
         name,
         digestUtil,
-        createBackplane(identifier),
+        createBackplane(config, identifier),
+        config,
         onStop,
         /* actionCacheFetchService=*/ listeningDecorator(newFixedThreadPool(24)));
   }
@@ -270,6 +274,7 @@ public class ShardInstance extends AbstractServerInstance {
       String name,
       DigestUtil digestUtil,
       Backplane backplane,
+      ShardInstanceConfig config,
       Runnable onStop,
       ListeningExecutorService actionCacheFetchService)
       throws InterruptedException {
@@ -279,27 +284,25 @@ public class ShardInstance extends AbstractServerInstance {
         backplane,
         new ShardActionCache(
             DEFAULT_MAX_LOCAL_ACTION_CACHE_SIZE, backplane, actionCacheFetchService),
-        configs.getServer().isRunDispatchedMonitor(),
-        configs.getServer().getDispatchedMonitorIntervalSeconds(),
-        configs.getServer().isRunOperationQueuer(),
-        configs.getServer().getMaxEntrySizeBytes(),
-        configs.getServer().getMaxCpu(),
-        configs.getServer().getMaxRequeueAttempts(),
-        Duration.newBuilder().setSeconds(configs.getMaximumActionTimeout()).build(),
-        configs.getServer().isUseDenyList(),
+        config.getRunDispatchedMonitor(),
+        config.getDispatchedMonitorIntervalSeconds(),
+        config.getRunOperationQueuer(),
+        config.getMaxEntrySizeBytes(),
+        config.getMaxCpu(),
+        config.getMaxRequeueAttempts(),
+        config.getMaximumActionTimeout(),
+        config.getUseDenyList(),
         onStop,
-        WorkerStubs.create(
-            digestUtil,
-            Duration.newBuilder().setSeconds(configs.getServer().getGrpcTimeout()).build()),
+        WorkerStubs.create(digestUtil, config.getGrpcTimeout()),
         actionCacheFetchService,
-        configs.getServer().isEnsureOutputsPresent());
+        config.getEnsureOutputsPresent());
   }
 
   public ShardInstance(
       String name,
       DigestUtil digestUtil,
       Backplane backplane,
-      ActionCache actionCache,
+      ReadThroughActionCache readThroughActionCache,
       boolean runDispatchedMonitor,
       int dispatchedMonitorIntervalSeconds,
       boolean runOperationQueuer,
@@ -316,13 +319,13 @@ public class ShardInstance extends AbstractServerInstance {
         name,
         digestUtil,
         /* contentAddressableStorage=*/ null,
-        /* actionCache=*/ actionCache,
+        /* actionCache=*/ readThroughActionCache,
         /* outstandingOperations=*/ null,
         /* completedOperations=*/ null,
         /* activeBlobWrites=*/ null,
         ensureOutputsPresent);
     this.backplane = backplane;
-    this.actionCache = actionCache;
+    this.readThroughActionCache = readThroughActionCache;
     this.workerStubs = workerStubs;
     this.onStop = onStop;
     this.maxEntrySizeBytes = maxEntrySizeBytes;
@@ -359,7 +362,7 @@ public class ShardInstance extends AbstractServerInstance {
                   ExecuteEntry executeEntry = backplane.deprequeueOperation();
                   stopwatch.start();
                   if (executeEntry == null) {
-                    log.log(Level.SEVERE, "OperationQueuer: Got null from deprequeue...");
+                    logger.log(Level.SEVERE, "OperationQueuer: Got null from deprequeue...");
                     return immediateFuture(null);
                   }
                   // half the watcher expiry, need to expose this from backplane
@@ -371,7 +374,7 @@ public class ShardInstance extends AbstractServerInstance {
                           backplane.queueing(executeEntry.getOperationName());
                         } catch (IOException e) {
                           if (!stopping && !stopped) {
-                            log.log(
+                            logger.log(
                                 Level.SEVERE,
                                 format("error polling %s for queuing", operationName),
                                 e);
@@ -383,26 +386,26 @@ public class ShardInstance extends AbstractServerInstance {
                       () -> {},
                       Deadline.after(5, MINUTES));
                   try {
-                    log.log(Level.FINE, "queueing " + operationName);
+                    logger.log(Level.FINE, "queueing " + operationName);
                     ListenableFuture<Void> queueFuture = queue(executeEntry, poller, queueTimeout);
                     addCallback(
                         queueFuture,
                         new FutureCallback<Void>() {
                           @Override
                           public void onSuccess(Void result) {
-                            log.log(Level.FINE, "successfully queued " + operationName);
+                            logger.log(Level.FINE, "successfully queued " + operationName);
                             // nothing
                           }
 
                           @Override
                           public void onFailure(Throwable t) {
-                            log.log(Level.SEVERE, "error queueing " + operationName, t);
+                            logger.log(Level.SEVERE, "error queueing " + operationName, t);
                           }
                         },
                         operationTransformService);
                     long operationTransformDispatchUSecs =
                         stopwatch.elapsed(MICROSECONDS) - canQueueUSecs;
-                    log.log(
+                    logger.log(
                         Level.FINE,
                         format(
                             "OperationQueuer: Dispatched To Transform %s: %dus in canQueue, %dus in transform dispatch",
@@ -410,14 +413,14 @@ public class ShardInstance extends AbstractServerInstance {
                     return queueFuture;
                   } catch (Throwable t) {
                     poller.pause();
-                    log.log(Level.SEVERE, "error queueing " + operationName, t);
+                    logger.log(Level.SEVERE, "error queueing " + operationName, t);
                     return immediateFuture(null);
                   }
                 }
 
                 @Override
                 public void run() {
-                  log.log(Level.FINE, "OperationQueuer: Running");
+                  logger.log(Level.FINE, "OperationQueuer: Running");
                   try {
                     for (; ; ) {
                       transformTokensQueue.put(new Object());
@@ -429,7 +432,7 @@ public class ShardInstance extends AbstractServerInstance {
                                   try {
                                     transformTokensQueue.take();
                                   } catch (InterruptedException e) {
-                                    log.log(
+                                    logger.log(
                                         Level.SEVERE,
                                         "interrupted while returning transform token",
                                         e);
@@ -448,15 +451,16 @@ public class ShardInstance extends AbstractServerInstance {
                     operationQueuer = null;
                     return;
                   } catch (Exception t) {
-                    log.log(Level.SEVERE, "OperationQueuer: fatal exception during iteration", t);
+                    logger.log(
+                        Level.SEVERE, "OperationQueuer: fatal exception during iteration", t);
                   } finally {
-                    log.log(Level.FINE, "OperationQueuer: Exiting");
+                    logger.log(Level.FINE, "OperationQueuer: Exiting");
                   }
                   operationQueuer = null;
                   try {
                     stop();
                   } catch (InterruptedException e) {
-                    log.log(Level.SEVERE, "interrupted while stopping instance " + getName(), e);
+                    logger.log(Level.SEVERE, "interrupted while stopping instance " + getName(), e);
                   }
                 }
               });
@@ -479,7 +483,7 @@ public class ShardInstance extends AbstractServerInstance {
                   Thread.currentThread().interrupt();
                   break;
                 } catch (Exception e) {
-                  log.log(Level.SEVERE, "Could not update RedisShardBackplane metrics", e);
+                  logger.log(Level.SEVERE, "Could not update RedisShardBackplane metrics", e);
                 }
               }
             },
@@ -535,7 +539,7 @@ public class ShardInstance extends AbstractServerInstance {
       return;
     }
     stopping = true;
-    log.log(Level.FINE, format("Instance %s is stopping", getName()));
+    logger.log(Level.FINE, format("Instance %s is stopping", getName()));
     if (operationQueuer != null) {
       operationQueuer.stop();
     }
@@ -552,26 +556,26 @@ public class ShardInstance extends AbstractServerInstance {
     onStop.run();
     backplane.stop();
     if (!contextDeadlineScheduler.awaitTermination(10, SECONDS)) {
-      log.log(
+      logger.log(
           Level.SEVERE,
           "Could not shut down operation deletion service, some operations may be zombies");
     }
     if (!operationDeletionService.awaitTermination(10, SECONDS)) {
-      log.log(
+      logger.log(
           Level.SEVERE,
           "Could not shut down operation deletion service, some operations may be zombies");
     }
     operationDeletionService.shutdownNow();
     if (!operationTransformService.awaitTermination(10, SECONDS)) {
-      log.log(Level.SEVERE, "Could not shut down operation transform service");
+      logger.log(Level.SEVERE, "Could not shut down operation transform service");
     }
     operationTransformService.shutdownNow();
     if (!actionCacheFetchService.awaitTermination(10, SECONDS)) {
-      log.log(Level.SEVERE, "Could not shut down action cache fetch service");
+      logger.log(Level.SEVERE, "Could not shut down action cache fetch service");
     }
     actionCacheFetchService.shutdownNow();
     workerStubs.invalidateAll();
-    log.log(Level.FINE, format("Instance %s has been stopped", getName()));
+    logger.log(Level.FINE, format("Instance %s has been stopped", getName()));
     stopping = false;
     stopped = true;
   }
@@ -581,10 +585,14 @@ public class ShardInstance extends AbstractServerInstance {
       Iterable<Digest> blobDigests, RequestMetadata requestMetadata) {
     try {
       if (inDenyList(requestMetadata)) {
-        return immediateFailedFuture(
-            Status.UNAVAILABLE
-                .withDescription("The action associated with this request is forbidden")
-                .asException());
+        // hacks for bazel where findMissingBlobs retry exhaustion throws RuntimeException
+        // TODO change this back to a transient when #10663 is landed
+        return immediateFuture(ImmutableList.of());
+        /*
+        return immediateFailedFuture(Status.UNAVAILABLE
+            .withDescription("The action associated with this request is forbidden")
+            .asException());
+            */
       }
     } catch (IOException e) {
       return immediateFailedFuture(Status.fromThrowable(e).asException());
@@ -691,7 +699,7 @@ public class ShardInstance extends AbstractServerInstance {
               removeMalfunctioningWorker(worker, t, "findMissingBlobs(" + requestId + ")");
             } else if (status.getCode() == Code.DEADLINE_EXCEEDED) {
               for (FindMissingResponseEntry response : responses.build()) {
-                log.log(
+                logger.log(
                     response.exception == null ? Level.WARNING : Level.SEVERE,
                     format(
                         "DEADLINE_EXCEEDED: findMissingBlobs(%s) %s: %d remaining of %d %dus%s",
@@ -765,7 +773,7 @@ public class ShardInstance extends AbstractServerInstance {
                       worker, t, "getBlob(" + DigestUtil.toString(blobDigest) + ")");
                 } else if (status.getCode() == Code.NOT_FOUND) {
                   casMissCounter.inc();
-                  log.log(
+                  logger.log(
                       Level.FINE, worker + " did not contain " + DigestUtil.toString(blobDigest));
                   // ignore this, the worker will update the backplane eventually
                 } else if (status.getCode() != Code.DEADLINE_EXCEEDED
@@ -816,35 +824,6 @@ public class ShardInstance extends AbstractServerInstance {
   }
 
   @Override
-  public ListenableFuture<List<Response>> getAllBlobsFuture(Iterable<Digest> digests) {
-    Executor contextExecutor = Context.current().fixedContextExecutor(directExecutor());
-    return allAsList(
-        Iterables.transform(
-            digests,
-            digest ->
-                catching(
-                    transform(
-                        getBlobFuture(digest, RequestMetadata.getDefaultInstance()),
-                        blob -> {
-                          Response.Builder response = Response.newBuilder().setDigest(digest);
-                          if (blob == null) {
-                            response.setStatus(NOT_FOUND);
-                          } else {
-                            response.setData(blob).setStatus(OK);
-                          }
-                          return response.build();
-                        },
-                        contextExecutor),
-                    Exception.class,
-                    e ->
-                        Response.newBuilder()
-                            .setDigest(digest)
-                            .setStatus(StatusProto.fromThrowable(e))
-                            .build(),
-                    contextExecutor)));
-  }
-
-  @Override
   public void getBlob(
       Digest blobDigest,
       long offset,
@@ -867,7 +846,7 @@ public class ShardInstance extends AbstractServerInstance {
     boolean emptyWorkerList = workersList.isEmpty();
     final ListenableFuture<List<String>> populatedWorkerListFuture;
     if (emptyWorkerList) {
-      log.log(
+      logger.log(
           Level.FINE,
           format(
               "worker list was initially empty for %s, attempting to correct",
@@ -883,7 +862,7 @@ public class ShardInstance extends AbstractServerInstance {
                   directExecutor(),
                   RequestMetadata.getDefaultInstance()),
               (foundOnWorkers) -> {
-                log.log(
+                logger.log(
                     Level.FINE,
                     format(
                         "worker list was corrected for %s to be %s",
@@ -913,7 +892,7 @@ public class ShardInstance extends AbstractServerInstance {
               triedCheck = true;
               workersList.clear();
               final ListenableFuture<List<String>> workersListFuture;
-              log.log(
+              logger.log(
                   Level.FINE,
                   format(
                       "worker list was depleted for %s, attempting to correct",
@@ -929,7 +908,7 @@ public class ShardInstance extends AbstractServerInstance {
                           directExecutor(),
                           RequestMetadata.getDefaultInstance()),
                       (foundOnWorkers) -> {
-                        log.log(
+                        logger.log(
                             Level.FINE,
                             format(
                                 "worker list was corrected after depletion for %s to be %s",
@@ -1041,7 +1020,7 @@ public class ShardInstance extends AbstractServerInstance {
     try {
       return workerStubs.get(worker);
     } catch (ExecutionException e) {
-      log.log(Level.SEVERE, "error getting worker stub for " + worker, e);
+      logger.log(Level.SEVERE, "error getting worker stub for " + worker, e);
       throw new IllegalStateException("stub instance creation must not fail");
     }
   }
@@ -1096,13 +1075,13 @@ public class ShardInstance extends AbstractServerInstance {
                     expectDirectory(
                         reason, directoryBlobDigest, RequestMetadata.getDefaultInstance()),
                     Exception.class,
-                    e -> {
-                      log.log(
+                    (t) -> {
+                      logger.log(
                           Level.SEVERE,
                           format(
                               "transformQueuedOperation(%s): error fetching directory %s",
                               reason, DigestUtil.toString(directoryBlobDigest)),
-                          e);
+                          t);
                       return null;
                     },
                     directExecutor())
@@ -1215,7 +1194,7 @@ public class ShardInstance extends AbstractServerInstance {
         new BiFunction<Digest, Executor, CompletableFuture<Directory>>() {
           @Override
           public CompletableFuture<Directory> apply(Digest digest, Executor executor) {
-            log.log(
+            logger.log(
                 Level.FINE,
                 format(
                     "transformQueuedOperation(%s): fetching directory %s",
@@ -1286,7 +1265,7 @@ public class ShardInstance extends AbstractServerInstance {
   private void removeMalfunctioningWorker(String worker, Throwable t, String context) {
     try {
       if (backplane.removeWorker(worker, format("%s: %s", context, t.getMessage()))) {
-        log.log(
+        logger.log(
             Level.WARNING,
             format("Removed worker '%s' during(%s) due to exception", worker, context),
             t);
@@ -1350,7 +1329,7 @@ public class ShardInstance extends AbstractServerInstance {
             transform(
                 expectCommand(commandDigest, requestMetadata),
                 (command) -> {
-                  log.log(
+                  logger.log(
                       Level.FINE,
                       format("transformQueuedOperation(%s): fetched command", operationName));
                   if (command != null) {
@@ -1637,14 +1616,14 @@ public class ShardInstance extends AbstractServerInstance {
 
           @Override
           public void onFailure(Throwable t) {
-            log.log(Level.SEVERE, "failed to requeue: " + operationName, t);
+            logger.log(Level.SEVERE, "failed to requeue: " + operationName, t);
             com.google.rpc.Status status = StatusProto.fromThrowable(t);
             if (status == null) {
-              log.log(Level.SEVERE, "no rpc status from exception for " + operationName, t);
+              logger.log(Level.SEVERE, "no rpc status from exception for " + operationName, t);
               status = asExecutionStatus(t);
             } else if (com.google.rpc.Code.forNumber(status.getCode())
                 == com.google.rpc.Code.DEADLINE_EXCEEDED) {
-              log.log(
+              logger.log(
                   Level.WARNING,
                   "an rpc status was thrown with DEADLINE_EXCEEDED for "
                       + operationName
@@ -1710,7 +1689,7 @@ public class ShardInstance extends AbstractServerInstance {
     if (inDenyList(executeEntry.getRequestMetadata())) {
       String msg = operationBlockedError(operationName);
       requeueFailureCounter.inc();
-      log.log(Level.WARNING, msg);
+      logger.log(Level.WARNING, msg);
       putFailedOperation(executeEntry, msg);
       return false;
     }
@@ -1720,7 +1699,7 @@ public class ShardInstance extends AbstractServerInstance {
       String msg =
           tooManyRequeuesError(operationName, queueEntry.getRequeueAttempts(), maxRequeueAttempts);
       requeueFailureCounter.inc();
-      log.log(Level.WARNING, msg);
+      logger.log(Level.WARNING, msg);
       putFailedOperation(executeEntry, msg);
       return false;
     }
@@ -1730,7 +1709,7 @@ public class ShardInstance extends AbstractServerInstance {
     if (operation == null) {
       String msg = operationMissingMessage(operationName);
       requeueFailureCounter.inc();
-      log.log(Level.WARNING, msg);
+      logger.log(Level.WARNING, msg);
       backplane.deleteOperation(operationName); // signal watchers
       return false;
     }
@@ -1739,7 +1718,7 @@ public class ShardInstance extends AbstractServerInstance {
     // Perhaps the operation was just completed by a worker.
     if (operation.getDone()) {
       String msg = operationCompleteMessage(operationName);
-      log.log(Level.INFO, msg);
+      logger.log(Level.INFO, msg);
       backplane.completeOperation(operationName);
       return false;
     }
@@ -1795,11 +1774,11 @@ public class ShardInstance extends AbstractServerInstance {
         if (operation != null && writeThrough) {
           ActionResult actionResult = getCacheableActionResult(operation);
           if (actionResult != null) {
-            actionCache.readThrough(actionKey, actionResult);
+            readThroughActionCache.readThrough(actionKey, actionResult);
           } else if (wasCompletelyExecuted(operation)) {
             // we want to avoid presenting any results for an action which
             // was not completely executed
-            actionCache.invalidate(actionKey);
+            readThroughActionCache.invalidate(actionKey);
           }
         }
         if (operation != null && operation.getMetadata().is(Action.class)) {
@@ -1833,7 +1812,7 @@ public class ShardInstance extends AbstractServerInstance {
       String operationName = createOperationName(UUID.randomUUID().toString());
 
       executionSuccess.inc();
-      log.log(
+      logger.log(
           Level.FINE,
           new StringBuilder()
               .append("ExecutionSuccess: ")
@@ -1844,9 +1823,9 @@ public class ShardInstance extends AbstractServerInstance {
               .append(DigestUtil.toString(actionDigest))
               .toString());
 
-      actionCache.invalidate(DigestUtil.asActionKey(actionDigest));
+      readThroughActionCache.invalidate(DigestUtil.asActionKey(actionDigest));
       if (!skipCacheLookup && recentCacheServedExecutions.getIfPresent(requestMetadata) != null) {
-        log.log(
+        logger.log(
             Level.FINE,
             format("Operation %s will have skip_cache_lookup = true due to retry", operationName));
         skipCacheLookup = true;
@@ -1934,7 +1913,7 @@ public class ShardInstance extends AbstractServerInstance {
               errorFuture.setException(StatusProto.toStatusException(status));
             } catch (StatusRuntimeException e) {
               if (attempt % 100 == 0) {
-                log.log(
+                logger.log(
                     Level.SEVERE,
                     format(
                         "On attempt %d to cancel %s: %s",
@@ -2035,7 +2014,7 @@ public class ShardInstance extends AbstractServerInstance {
         checkCacheFuture,
         Exception.class,
         (e) -> {
-          log.log(Level.SEVERE, "error checking cache for " + operation.getName(), e);
+          logger.log(Level.SEVERE, "error checking cache for " + operation.getName(), e);
           return false;
         },
         operationTransformService);
@@ -2071,7 +2050,7 @@ public class ShardInstance extends AbstractServerInstance {
           if (cachedResult) {
             poller.pause();
             long checkCacheUSecs = stopwatch.elapsed(MICROSECONDS);
-            log.log(
+            logger.log(
                 Level.FINE,
                 format(
                     "ShardInstance(%s): checkCache(%s): %sus elapsed",
@@ -2098,7 +2077,7 @@ public class ShardInstance extends AbstractServerInstance {
     }
     Digest actionDigest = metadata.getActionDigest();
     SettableFuture<Void> queueFuture = SettableFuture.create();
-    log.log(
+    logger.log(
         Level.FINE,
         format(
             "ShardInstance(%s): queue(%s): fetching action %s",
@@ -2113,7 +2092,7 @@ public class ShardInstance extends AbstractServerInstance {
                     throw Status.NOT_FOUND.asException();
                   } else if (action.getDoNotCache()) {
                     // invalidate our action cache result as well as watcher owner
-                    actionCache.invalidate(DigestUtil.asActionKey(actionDigest));
+                    readThroughActionCache.invalidate(DigestUtil.asActionKey(actionDigest));
                     backplane.putOperation(
                         operation.toBuilder().setMetadata(Any.pack(action)).build(),
                         metadata.getStage());
@@ -2141,7 +2120,7 @@ public class ShardInstance extends AbstractServerInstance {
         transformAsync(
             actionFuture,
             (action) -> {
-              log.log(
+              logger.log(
                   Level.FINE,
                   format(
                       "ShardInstance(%s): queue(%s): fetched action %s transforming queuedOperation",
@@ -2171,7 +2150,7 @@ public class ShardInstance extends AbstractServerInstance {
         transformAsync(
             queuedFuture,
             (profiledQueuedMetadata) -> {
-              log.log(
+              logger.log(
                   Level.FINE,
                   format(
                       "ShardInstance(%s): queue(%s): queuedOperation %s transformed, validating",
@@ -2193,7 +2172,7 @@ public class ShardInstance extends AbstractServerInstance {
         transformAsync(
             validatedFuture,
             (profiledQueuedMetadata) -> {
-              log.log(
+              logger.log(
                   Level.FINE,
                   format(
                       "ShardInstance(%s): queue(%s): queuedOperation %s validated, uploading",
@@ -2245,7 +2224,7 @@ public class ShardInstance extends AbstractServerInstance {
               backplane.queue(queueEntry, queueOperation);
               long elapsedUSecs = stopwatch.elapsed(MICROSECONDS);
               long queueUSecs = elapsedUSecs - startQueueUSecs;
-              log.log(
+              logger.log(
                   Level.FINE,
                   format(
                       "ShardInstance(%s): queue(%s): %dus checkCache, %dus transform, %dus validate, %dus upload, %dus queue, %dus elapsed",
@@ -2270,11 +2249,12 @@ public class ShardInstance extends AbstractServerInstance {
             poller.pause();
             com.google.rpc.Status status = StatusProto.fromThrowable(t);
             if (status == null) {
-              log.log(Level.SEVERE, "no rpc status from exception for " + operation.getName(), t);
+              logger.log(
+                  Level.SEVERE, "no rpc status from exception for " + operation.getName(), t);
               status = asExecutionStatus(t);
             } else if (com.google.rpc.Code.forNumber(status.getCode())
                 == com.google.rpc.Code.DEADLINE_EXCEEDED) {
-              log.log(
+              logger.log(
                   Level.WARNING,
                   "an rpc status was thrown with DEADLINE_EXCEEDED for "
                       + operation.getName()
@@ -2464,7 +2444,7 @@ public class ShardInstance extends AbstractServerInstance {
 
   @Override
   protected Logger getLogger() {
-    return log;
+    return logger;
   }
 
   @Override

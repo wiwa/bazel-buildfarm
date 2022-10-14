@@ -86,7 +86,7 @@ public interface Instance {
       RequestMetadata requestMetadata)
       throws IOException;
 
-  ListenableFuture<List<Response>> getAllBlobsFuture(Iterable<Digest> digests);
+  ListenableFuture<Iterable<Response>> getAllBlobsFuture(Iterable<Digest> digests);
 
   String getTree(Digest rootDigest, int pageSize, String pageToken, Tree.Builder tree);
 

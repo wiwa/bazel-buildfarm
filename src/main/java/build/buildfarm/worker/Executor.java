@@ -14,13 +14,31 @@
 
 package build.buildfarm.worker;
 
-import static com.google.common.collect.Maps.uniqueIndex;
-import static com.google.protobuf.util.Durations.add;
-import static com.google.protobuf.util.Durations.compare;
-import static com.google.protobuf.util.Durations.fromSeconds;
-import static java.lang.String.format;
-import static java.util.concurrent.TimeUnit.DAYS;
-import static java.util.concurrent.TimeUnit.MICROSECONDS;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import com.github.dockerjava.api.DockerClient;
+import com.github.dockerjava.core.DockerClientBuilder;
+import com.google.common.base.Stopwatch;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.devtools.build.lib.shell.Protos.ExecutionStatistics;
+import com.google.longrunning.Operation;
+import com.google.protobuf.Any;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.Duration;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.util.Durations;
+import com.google.protobuf.util.Timestamps;
+import com.google.rpc.Code;
 
 import build.bazel.remote.execution.v2.Action;
 import build.bazel.remote.execution.v2.ActionResult;
@@ -33,39 +51,30 @@ import build.buildfarm.common.ProcessUtils;
 import build.buildfarm.common.Time;
 import build.buildfarm.common.Write;
 import build.buildfarm.common.Write.NullWrite;
-import build.buildfarm.common.config.ExecutionPolicy;
-import build.buildfarm.common.config.ExecutionWrapper;
 import build.buildfarm.v1test.ExecutingOperationMetadata;
+import build.buildfarm.v1test.ExecutionPolicy;
+import build.buildfarm.v1test.ExecutionWrapper;
+import build.buildfarm.v1test.Tree;
 import build.buildfarm.worker.WorkerContext.IOResource;
+import build.buildfarm.worker.persistent.PersistentExecutor;
+import build.buildfarm.worker.persistent.WorkFilesContext;
 import build.buildfarm.worker.resources.ResourceLimits;
-import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.core.DockerClientBuilder;
-import com.google.common.base.Stopwatch;
-import com.google.common.collect.ImmutableList;
-import com.google.devtools.build.lib.shell.Protos.ExecutionStatistics;
-import com.google.longrunning.Operation;
-import com.google.protobuf.Any;
-import com.google.protobuf.ByteString;
-import com.google.protobuf.Duration;
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.util.Durations;
-import com.google.protobuf.util.Timestamps;
-import com.google.rpc.Code;
 import io.grpc.Deadline;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import lombok.extern.java.Log;
 
-@Log
+import static java.lang.String.format;
+import static java.util.concurrent.TimeUnit.DAYS;
+import static java.util.concurrent.TimeUnit.MICROSECONDS;
+
+import static com.google.common.collect.Maps.uniqueIndex;
+import static com.google.protobuf.util.Durations.add;
+import static com.google.protobuf.util.Durations.compare;
+import static com.google.protobuf.util.Durations.fromSeconds;
+
+import static build.buildfarm.v1test.ExecutionPolicy.PolicyCase.WRAPPER;
+
 class Executor {
   private static final int INCOMPLETE_EXIT_CODE = -1;
+  private static final Logger logger = Logger.getLogger(Executor.class.getName());
 
   private final WorkerContext workerContext;
   private final OperationContext operationContext;
@@ -74,7 +83,8 @@ class Executor {
   private boolean wasErrored = false;
 
   Executor(
-      WorkerContext workerContext, OperationContext operationContext, ExecuteActionStage owner) {
+      WorkerContext workerContext, OperationContext operationContext, ExecuteActionStage owner
+  ) {
     this.workerContext = workerContext;
     this.operationContext = operationContext;
     this.owner = owner;
@@ -96,7 +106,7 @@ class Executor {
     try {
       metadata = operationContext.operation.getMetadata().unpack(ExecuteOperationMetadata.class);
     } catch (InvalidProtocolBufferException e) {
-      log.log(Level.SEVERE, "invalid execute operation metadata", e);
+      logger.log(Level.SEVERE, "invalid execute operation metadata", e);
       return 0;
     }
     ExecuteOperationMetadata executingMetadata =
@@ -128,12 +138,12 @@ class Executor {
     try {
       operationUpdateSuccess = workerContext.putOperation(operation);
     } catch (IOException e) {
-      log.log(
+      logger.log(
           Level.SEVERE, format("error putting operation %s as EXECUTING", operation.getName()), e);
     }
 
     if (!operationUpdateSuccess) {
-      log.log(
+      logger.log(
           Level.WARNING,
           String.format(
               "Executor::run(%s): could not transition to EXECUTING", operation.getName()));
@@ -196,10 +206,11 @@ class Executor {
       ResourceLimits limits,
       Iterable<ExecutionPolicy> policies,
       Duration timeout,
-      Stopwatch stopwatch)
+      Stopwatch stopwatch
+  )
       throws InterruptedException {
     /* execute command */
-    log.log(Level.FINE, "Executor: Operation " + operation.getName() + " Executing command");
+    logger.log(Level.FINE, "Executor: Operation " + operation.getName() + " Executing command");
 
     ActionResult.Builder resultBuilder = operationContext.executeResponse.getResultBuilder();
     resultBuilder
@@ -217,11 +228,11 @@ class Executor {
     ImmutableList.Builder<String> arguments = ImmutableList.builder();
     Code statusCode;
     try (IOResource resource =
-        workerContext.limitExecution(
-            operationName, arguments, operationContext.command, workingDirectory)) {
+             workerContext.limitExecution(
+                 operationName, arguments, operationContext.command, workingDirectory)) {
       for (ExecutionPolicy policy : policies) {
-        if (policy.getExecutionWrapper() != null) {
-          arguments.addAll(transformWrapper(policy.getExecutionWrapper()));
+        if (policy.getPolicyCase() == WRAPPER) {
+          arguments.addAll(transformWrapper(policy.getWrapper()));
         }
       }
 
@@ -269,7 +280,7 @@ class Executor {
             .setMessage("command resources were referenced after execution completed");
       }
     } catch (IOException e) {
-      log.log(Level.SEVERE, format("error executing operation %s", operationName), e);
+      logger.log(Level.SEVERE, format("error executing operation %s", operationName), e);
       operationContext.poller.pause();
       putError();
       return 0;
@@ -282,7 +293,8 @@ class Executor {
         "Executor(claim)",
         operationContext.queueEntry,
         ExecutionStage.Value.EXECUTING,
-        () -> {},
+        () -> {
+        },
         Deadline.after(10, DAYS));
 
     resultBuilder
@@ -290,7 +302,7 @@ class Executor {
         .setExecutionCompletedTimestamp(Timestamps.fromMillis(System.currentTimeMillis()));
     long executeUSecs = stopwatch.elapsed(MICROSECONDS);
 
-    log.log(
+    logger.log(
         Level.FINE,
         String.format(
             "Executor::executeCommand(%s): Completed command: exit code %d",
@@ -309,7 +321,7 @@ class Executor {
         throw e;
       }
     } else {
-      log.log(Level.FINE, "Executor: Operation " + operationName + " Failed to claim output");
+      logger.log(Level.FINE, "Executor: Operation " + operationName + " Failed to claim output");
       boolean wasInterrupted = Thread.interrupted();
       try {
         putError();
@@ -333,23 +345,23 @@ class Executor {
       try {
         putError();
       } catch (InterruptedException errorEx) {
-        log.log(Level.SEVERE, format("interrupted while erroring %s", operationName), errorEx);
+        logger.log(Level.SEVERE, format("interrupted while erroring %s", operationName), errorEx);
       } finally {
         Thread.currentThread().interrupt();
       }
     } catch (Exception e) {
       // clear interrupt flag for error put
       boolean wasInterrupted = Thread.interrupted();
-      log.log(Level.SEVERE, format("errored during execution of %s", operationName), e);
+      logger.log(Level.SEVERE, format("errored during execution of %s", operationName), e);
       try {
         putError();
       } catch (InterruptedException errorEx) {
-        log.log(
+        logger.log(
             Level.SEVERE,
             format("interrupted while erroring %s after error", operationName),
             errorEx);
       } catch (Exception errorEx) {
-        log.log(
+        logger.log(
             Level.SEVERE, format("errored while erroring %s after error", operationName), errorEx);
       }
       if (wasInterrupted) {
@@ -380,7 +392,7 @@ class Executor {
         uniqueIndex(operationContext.command.getPlatform().getPropertiesList(), Property::getName);
 
     arguments.add(wrapper.getPath());
-    for (String argument : wrapper.getArguments()) {
+    for (String argument : wrapper.getArgumentsList()) {
       // If the argument is of the form <propertyName>, substitute the value of
       // the property from the platform specification.
       if (!argument.equals("<>")
@@ -410,8 +422,22 @@ class Executor {
       List<EnvironmentVariable> environmentVariables,
       ResourceLimits limits,
       Duration timeout,
-      ActionResult.Builder resultBuilder)
+      ActionResult.Builder resultBuilder
+  )
       throws IOException, InterruptedException {
+
+    StringBuilder sb = new StringBuilder();
+    sb.append("======<");
+    sb.append("Calling executeCommand with:");
+    sb.append("operationName=" + operationName);
+    sb.append("execDir=" + execDir.toAbsolutePath());
+    sb.append("arguments=" + ImmutableList.copyOf(arguments));
+    sb.append("environmentVariables=" + ImmutableList.copyOf(environmentVariables));
+    sb.append("limits.unusedProperties=" + ImmutableMap.copyOf(limits.unusedProperties));
+    sb.append("timeout=" + timeout);
+    sb.append("======>");
+    logger.fine(sb.toString());
+
     ProcessBuilder processBuilder =
         new ProcessBuilder(arguments).directory(execDir.toAbsolutePath().toFile());
 
@@ -420,14 +446,48 @@ class Executor {
     for (EnvironmentVariable environmentVariable : environmentVariables) {
       environment.put(environmentVariable.getName(), environmentVariable.getValue());
     }
-    for (Map.Entry<String, String> environmentVariable :
-        limits.extraEnvironmentVariables.entrySet()) {
-      environment.put(environmentVariable.getKey(), environmentVariable.getValue());
-    }
+
+    environment.putAll(limits.extraEnvironmentVariables);
 
     // allow debugging before an execution
     if (limits.debugBeforeExecution) {
+      // TODO this should not be using ProcessBuilder; current it uses it like a context
       return ExecutionDebugger.performBeforeExecutionDebug(processBuilder, limits, resultBuilder);
+    }
+
+    boolean usePersistentWorker = !limits.persistentWorkerKey.isEmpty();
+
+    // boolean isJavaBuilder = arguments.contains(
+    //     "external/remote_java_tools/java_tools/JavaBuilder_deploy.jar");
+    // boolean isScalac = arguments.size() > 1 && arguments.get(0).endsWith("scalac/scalac");
+    // usePersistentWorker = usePersistentWorker || isJavaBuilder || isScalac;
+
+    if (usePersistentWorker) {
+      logger.log(Level.FINE, "");
+      logger.log(Level.FINE, "usePersistentWorker; got persistentWorkerCommand of : " + limits.persistentWorkerCommand);
+
+      Tree execTree = workerContext.getQueuedOperation(operationContext.queueEntry).getTree();
+
+      WorkFilesContext filesContext = new WorkFilesContext(
+          execDir,
+          execTree,
+          ImmutableList.copyOf(operationContext.command.getOutputPathsList()),
+          ImmutableList.copyOf(operationContext.command.getOutputFilesList()),
+          ImmutableList.copyOf(operationContext.command.getOutputDirectoriesList())
+      );
+
+      return PersistentExecutor.runOnPersistentWorker(
+          limits.persistentWorkerCommand,
+          filesContext,
+          operationName,
+          ImmutableList.copyOf(arguments),
+          ImmutableMap.copyOf(environment),
+          limits,
+          timeout,
+          resultBuilder
+      );
+    } else {
+      logger.log(Level.FINE, "don't usePersistentWorker");
     }
 
     // run the action under docker
@@ -447,13 +507,33 @@ class Executor {
       return DockerExecutor.runActionWithDocker(dockerClient, settings, resultBuilder);
     }
 
+    return executeCommandNormally(
+        processBuilder,
+        operationName,
+        execDir,
+        limits,
+        timeout,
+        resultBuilder
+    );
+  }
+
+  private Code executeCommandNormally(
+      ProcessBuilder processBuilder,
+      String operationName,
+      Path execDir,
+      ResourceLimits limits,
+      Duration timeout,
+      ActionResult.Builder resultBuilder
+  )
+      throws IOException, InterruptedException {
+        
     long startNanoTime = System.nanoTime();
     Process process;
     try {
       process = ProcessUtils.threadSafeStart(processBuilder);
       process.getOutputStream().close();
     } catch (IOException e) {
-      log.log(Level.SEVERE, format("error starting process for %s", operationName), e);
+      logger.log(Level.SEVERE, format("error starting process for %s", operationName), e);
       // again, should we do something else here??
       resultBuilder.setExitCode(INCOMPLETE_EXIT_CODE);
       // The openjdk IOException for an exec failure here includes the working
@@ -500,7 +580,7 @@ class Executor {
           exitCode = process.exitValue();
           processCompleted = true;
         } else {
-          log.log(
+          logger.log(
               Level.INFO,
               format("process timed out for %s after %ds", operationName, timeout.getSeconds()));
           statusCode = Code.DEADLINE_EXCEEDED;
@@ -511,7 +591,7 @@ class Executor {
         process.destroy();
         int waitMillis = 1000;
         while (!process.waitFor(waitMillis, TimeUnit.MILLISECONDS)) {
-          log.log(
+          logger.log(
               Level.INFO,
               format("process did not respond to termination for %s, killing it", operationName));
           process.destroyForcibly();
@@ -530,7 +610,7 @@ class Executor {
       stderr = stderrReader.getData();
 
     } catch (Exception e) {
-      log.log(Level.SEVERE, "error extracting stdout/stderr: ", e.getMessage());
+      logger.log(Level.SEVERE, "error extracting stdout/stderr: ", e.getMessage());
     }
 
     resultBuilder.setExitCode(exitCode).setStdoutRaw(stdout).setStderrRaw(stderr);
@@ -553,5 +633,6 @@ class Executor {
     }
 
     return statusCode;
+
   }
 }

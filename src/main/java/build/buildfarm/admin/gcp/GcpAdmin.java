@@ -16,9 +16,7 @@ package build.buildfarm.admin.gcp;
 
 import build.buildfarm.admin.Admin;
 import build.buildfarm.v1test.GetHostsResult;
-import org.springframework.stereotype.Component;
 
-@Component
 public class GcpAdmin implements Admin {
   @Override
   public void terminateHost(String hostId) {
@@ -48,10 +46,5 @@ public class GcpAdmin implements Admin {
   @Override
   public void disableHostScaleInProtection(String instanceName) {
     throw new UnsupportedOperationException("Not Implemented.");
-  }
-
-  @Override
-  public void disableHostScaleInProtection(String clusterEndpoint, String instanceIp) {
-    throw new UnsupportedOperationException("Not Implemented");
   }
 }

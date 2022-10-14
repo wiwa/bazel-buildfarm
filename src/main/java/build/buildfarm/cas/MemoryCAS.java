@@ -26,6 +26,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.ByteString;
+import com.google.rpc.Code;
 import com.google.rpc.Status;
 import io.grpc.protobuf.StatusProto;
 import io.grpc.stub.ServerCallStreamObserver;
@@ -40,11 +41,15 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.concurrent.GuardedBy;
-import lombok.extern.java.Log;
 
-@Log
 public class MemoryCAS implements ContentAddressableStorage {
+  private static final Logger logger = Logger.getLogger(MemoryCAS.class.getName());
+
+  static final Status OK = Status.newBuilder().setCode(Code.OK.getNumber()).build();
+
+  static final Status NOT_FOUND = Status.newBuilder().setCode(Code.NOT_FOUND.getNumber()).build();
 
   private final long maxSizeInBytes;
   private final Consumer<Digest> onPut;
@@ -146,11 +151,11 @@ public class MemoryCAS implements ContentAddressableStorage {
   }
 
   @Override
-  public ListenableFuture<List<Response>> getAllFuture(Iterable<Digest> digests) {
+  public ListenableFuture<Iterable<Response>> getAllFuture(Iterable<Digest> digests) {
     return immediateFuture(getAll(digests));
   }
 
-  synchronized List<Response> getAll(Iterable<Digest> digests) {
+  synchronized Iterable<Response> getAll(Iterable<Digest> digests) {
     return getAll(
         digests,
         (digest) -> {
@@ -162,7 +167,7 @@ public class MemoryCAS implements ContentAddressableStorage {
         });
   }
 
-  public static List<Response> getAll(
+  public static Iterable<Response> getAll(
       Iterable<Digest> digests, Function<Digest, ByteString> blobGetter) {
     ImmutableList.Builder<Response> responses = ImmutableList.builder();
     for (Digest digest : digests) {
@@ -190,7 +195,7 @@ public class MemoryCAS implements ContentAddressableStorage {
         response.setData(blob).setStatus(OK);
       }
     } catch (Throwable t) {
-      log.log(Level.SEVERE, "error getting " + DigestUtil.toString(digest), t);
+      logger.log(Level.SEVERE, "error getting " + DigestUtil.toString(digest), t);
       response.setStatus(statusFromThrowable(t));
     }
     return response.build();
@@ -272,7 +277,7 @@ public class MemoryCAS implements ContentAddressableStorage {
     }
 
     if (sizeInBytes > maxSizeInBytes) {
-      log.log(
+      logger.log(
           Level.WARNING,
           String.format(
               "Out of nodes to remove, sizeInBytes = %d, maxSizeInBytes = %d, storage = %d, list = %d",
@@ -303,7 +308,7 @@ public class MemoryCAS implements ContentAddressableStorage {
   @GuardedBy("this")
   private void expireEntry(Entry e) {
     Digest digest = DigestUtil.buildDigest(e.key, e.value.size());
-    log.log(Level.INFO, "MemoryLRUCAS: expiring " + DigestUtil.toString(digest));
+    logger.log(Level.INFO, "MemoryLRUCAS: expiring " + DigestUtil.toString(digest));
     if (delegate != null) {
       try {
         Write write =
@@ -312,7 +317,7 @@ public class MemoryCAS implements ContentAddressableStorage {
           e.value.getData().writeTo(out);
         }
       } catch (IOException ioEx) {
-        log.log(
+        logger.log(
             Level.SEVERE, String.format("error delegating %s", DigestUtil.toString(digest)), ioEx);
       }
     }

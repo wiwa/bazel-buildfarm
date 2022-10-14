@@ -21,10 +21,9 @@ import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.logging.Logger;
-import lombok.extern.java.Log;
 
-@Log
 public class InputFetchStage extends SuperscalarPipelineStage {
+  private static final Logger logger = Logger.getLogger(InputFetchStage.class.getName());
   private static final Gauge inputFetchSlotUsage =
       Gauge.build().name("input_fetch_slot_usage").help("Input fetch slot Usage.").register();
   private static final Histogram inputFetchTime =
@@ -44,7 +43,7 @@ public class InputFetchStage extends SuperscalarPipelineStage {
 
   @Override
   protected Logger getLogger() {
-    return log;
+    return logger;
   }
 
   @Override
@@ -62,9 +61,7 @@ public class InputFetchStage extends SuperscalarPipelineStage {
       throw new IllegalStateException("tried to remove unknown fetcher thread");
     }
     releaseClaim(operationName, 1);
-    int slotUsage = fetchers.size();
-    inputFetchSlotUsage.set(slotUsage);
-    return slotUsage;
+    return fetchers.size();
   }
 
   public void releaseInputFetcher(
@@ -72,6 +69,7 @@ public class InputFetchStage extends SuperscalarPipelineStage {
     int size = removeAndRelease(operationName);
     inputFetchTime.observe(usecs / 1000.0);
     inputFetchStallTime.observe(stallUSecs / 1000.0);
+    inputFetchSlotUsage.set(size);
     logComplete(
         operationName,
         usecs,
@@ -102,10 +100,9 @@ public class InputFetchStage extends SuperscalarPipelineStage {
 
     synchronized (this) {
       fetchers.add(fetcher);
-      int slotUsage = fetchers.size();
-      inputFetchSlotUsage.set(slotUsage);
       logStart(
-          operationContext.queueEntry.getExecuteEntry().getOperationName(), getUsage(slotUsage));
+          operationContext.queueEntry.getExecuteEntry().getOperationName(),
+          getUsage(fetchers.size()));
       fetcher.start();
     }
   }

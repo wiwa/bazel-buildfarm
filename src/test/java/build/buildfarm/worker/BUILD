@@ -13,12 +13,12 @@ java_test(
         ":fuse": ["FuseCASTest.java"],
         "//conditions:default": [],
     }),
-    data = ["//examples:example_configs"],
-    plugins = ["//src/main/java/build/buildfarm/common:lombok"],
+    classpath_resources = [
+        "//src/test/java/build/buildfarm:configs",
+    ],
     test_class = "build.buildfarm.AllTests",
     deps = [
         "//src/main/java/build/buildfarm/common",
-        "//src/main/java/build/buildfarm/common/config",
         "//src/main/java/build/buildfarm/instance",
         "//src/main/java/build/buildfarm/worker",
         "//src/main/java/build/buildfarm/worker/resources",
@@ -37,7 +37,6 @@ java_test(
         "@maven//:io_grpc_grpc_core",
         "@maven//:io_grpc_grpc_protobuf",
         "@maven//:org_mockito_mockito_core",
-        "@maven//:org_projectlombok_lombok",
         "@remote_apis//:build_bazel_remote_execution_v2_remote_execution_java_proto",
     ],
 )

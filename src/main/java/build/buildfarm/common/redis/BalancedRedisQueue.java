@@ -15,7 +15,6 @@
 package build.buildfarm.common.redis;
 
 import build.buildfarm.common.StringVisitor;
-import build.buildfarm.common.config.Queue;
 import build.buildfarm.v1test.QueueStatus;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -49,7 +48,7 @@ public class BalancedRedisQueue {
    * @brief Type of the queue.
    * @details It's used for selecting between regular and priority queues
    */
-  private final Queue.QUEUE_TYPE queueType;
+  private final String queueType;
 
   /**
    * @field originalHashtag
@@ -102,7 +101,7 @@ public class BalancedRedisQueue {
    * @note Overloaded.
    */
   public BalancedRedisQueue(String name, List<String> hashtags) {
-    this(name, hashtags, -1, Queue.QUEUE_TYPE.standard);
+    this(name, hashtags, -1, "regular");
   }
 
   /**
@@ -113,7 +112,7 @@ public class BalancedRedisQueue {
    * @param queueType Type of the queue in use
    * @note Overloaded.
    */
-  public BalancedRedisQueue(String name, List<String> hashtags, Queue.QUEUE_TYPE queueType) {
+  public BalancedRedisQueue(String name, List<String> hashtags, String queueType) {
     this(name, hashtags, -1, queueType);
   }
 
@@ -126,7 +125,7 @@ public class BalancedRedisQueue {
    * @note Overloaded.
    */
   public BalancedRedisQueue(String name, List<String> hashtags, int maxQueueSize) {
-    this(name, hashtags, maxQueueSize, Queue.QUEUE_TYPE.standard);
+    this(name, hashtags, maxQueueSize, "regular");
   }
 
   /**
@@ -139,10 +138,10 @@ public class BalancedRedisQueue {
    * @note Overloaded.
    */
   public BalancedRedisQueue(
-      String name, List<String> hashtags, int maxQueueSize, Queue.QUEUE_TYPE queueType) {
+      String name, List<String> hashtags, int maxQueueSize, String queueType) {
     this.originalHashtag = RedisHashtags.existingHash(name);
     this.name = RedisHashtags.unhashedName(name);
-    this.queueType = queueType;
+    this.queueType = queueType.toLowerCase();
     this.maxQueueSize = maxQueueSize;
     createHashedQueues(this.name, hashtags, this.queueType);
   }
@@ -380,12 +379,13 @@ public class BalancedRedisQueue {
    * @param name The global name of the queue.
    * @param hashtags Hashtags to distribute queue data.
    */
-  private void createHashedQueues(String name, List<String> hashtags, Queue.QUEUE_TYPE queueType) {
+  private void createHashedQueues(String name, List<String> hashtags, String queueType) {
     // create an internal queue for each of the provided hashtags
     for (String hashtag : hashtags) {
       queues.add(
           new RedisQueueFactory().getQueue(queueType, RedisHashtags.hashedName(name, hashtag)));
     }
+
     // if there were no hashtags, we'll create a single internal queue
     // so that the balanced redis queue can still function.
     // we'll use the basename provided to create the single internal queue and use the original

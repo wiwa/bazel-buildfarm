@@ -1,15 +1,13 @@
 java_test(
     name = "tests",
     size = "small",
-    srcs = [
-        "BuildFarmServerIntegrationTest.java",
+    srcs = glob(["*.java"]),
+    classpath_resources = [
+        "//src/test/java/build/buildfarm:configs",
     ],
-    data = ["//examples:example_configs"],
-    tags = ["integration"],
     test_class = "build.buildfarm.AllTests",
     deps = [
         "//src/main/java/build/buildfarm/common",
-        "//src/main/java/build/buildfarm/common/config",
         "//src/main/java/build/buildfarm/common/grpc",
         "//src/main/java/build/buildfarm/instance",
         "//src/main/java/build/buildfarm/instance/stub",

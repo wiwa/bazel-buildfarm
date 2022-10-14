@@ -1,16 +1,19 @@
 java_library(
     name = "worker",
     srcs = glob(["*.java"]),
-    plugins = ["//src/main/java/build/buildfarm/common:lombok"],
     visibility = ["//visibility:public"],
     deps = [
+        "//persistentworkers/src/main/java/persistent/bazel:bazel-persistent-workers",
+        "//persistentworkers/src/main/java/persistent/common:persistent-common",
         "//src/main/java/build/buildfarm/common",
-        "//src/main/java/build/buildfarm/common/config",
         "//src/main/java/build/buildfarm/instance",
         "//src/main/java/build/buildfarm/instance/stub",
+        "//src/main/java/build/buildfarm/worker/persistent",
         "//src/main/java/build/buildfarm/worker/resources",
+        "//src/main/java/build/buildfarm/worker/util",
         "//src/main/protobuf:build_buildfarm_v1test_buildfarm_java_proto",
         "@bazel//src/main/protobuf:execution_statistics_java_proto",
+        "@bazel_tools//src/main/protobuf:worker_protocol_java_proto",
         "@googleapis//:google_rpc_code_java_proto",
         "@googleapis//:google_rpc_error_details_java_proto",
         "@maven//:com_github_docker_java_docker_java",
@@ -37,6 +40,5 @@ java_library(
         "@maven//:io_prometheus_simpleclient",
         "@maven//:org_apache_commons_commons_compress",
         "@maven//:org_jetbrains_annotations",
-        "@maven//:org_projectlombok_lombok",
     ],
 )

@@ -38,7 +38,7 @@ import java.io.IOException;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.logging.Level;
-import lombok.extern.java.Log;
+import java.util.logging.Logger;
 
 /**
  * @class S3Bucket
@@ -46,12 +46,12 @@ import lombok.extern.java.Log;
  * @details This uses configuration to fetch secret information and obtain the S3 bucket. If the
  *     bucket does not already exist remotely, it is created upon construction.
  */
-@Log
 public class S3Bucket {
   /**
    * @field logger
    * @brief Used for printing error information.
    */
+  private static final Logger logger = Logger.getLogger(S3Bucket.class.getName());
 
   /**
    * @field s3
@@ -79,6 +79,7 @@ public class S3Bucket {
   /**
    * @brief Constructor.
    * @details Construct an S3 bucket with existing bucket and s3 instance.
+   * @param config Configuration information for establishing the bucket.
    * @param s3 An established S3 instance
    * @param bucket An established bucket instance
    */
@@ -98,7 +99,8 @@ public class S3Bucket {
     try {
       s3.putObject(bucket.getName(), keyName, new File(filePath));
     } catch (AmazonServiceException e) {
-      log.log(Level.SEVERE, String.format("Blob could not be uploaded: %s", e.getErrorMessage()));
+      logger.log(
+          Level.SEVERE, String.format("Blob could not be uploaded: %s", e.getErrorMessage()));
       return false;
     }
     return true;
@@ -123,17 +125,17 @@ public class S3Bucket {
       s3is.close();
       fos.close();
     } catch (AmazonServiceException e) {
-      log.log(
+      logger.log(
           Level.SEVERE,
           String.format("Service exception while downloading blob: %s", e.getErrorMessage()));
     } catch (FileNotFoundException e) {
-      log.log(Level.SEVERE, String.format("Blob does not exist in bucket: %s", e.getMessage()));
+      logger.log(Level.SEVERE, String.format("Blob does not exist in bucket: %s", e.getMessage()));
     } catch (IOException e) {
-      log.log(
+      logger.log(
           Level.SEVERE,
           String.format("Failure creating file from downloaded blob: %s", e.getMessage()));
     } catch (Exception e) {
-      log.log(Level.SEVERE, String.format("Unknown Failure: %s", e.getMessage()));
+      logger.log(Level.SEVERE, String.format("Unknown Failure: %s", e.getMessage()));
     }
   }
 
@@ -155,7 +157,7 @@ public class S3Bucket {
     try {
       return s3.createBucket(bucketName);
     } catch (AmazonS3Exception e) {
-      log.log(Level.SEVERE, e.getMessage());
+      logger.log(Level.SEVERE, e.getMessage());
     }
 
     // The bucket could not be created.
@@ -230,7 +232,7 @@ public class S3Bucket {
     try {
       getSecretValueResult = client.getSecretValue(getSecretValueRequest);
     } catch (Exception e) {
-      log.log(Level.SEVERE, String.format("Could not get secret %s from AWS.", secretName));
+      logger.log(Level.SEVERE, String.format("Could not get secret %s from AWS.", secretName));
     }
 
     // decode secret
@@ -252,7 +254,7 @@ public class S3Bucket {
         final String secretKey = secretMap.get("secret_key");
         return AwsSecret.newBuilder().setAccessKeyId(accessKeyId).setSecretKey(secretKey).build();
       } catch (IOException e) {
-        log.log(Level.SEVERE, String.format("Could not parse secret %s from AWS", secretName));
+        logger.log(Level.SEVERE, String.format("Could not parse secret %s from AWS", secretName));
       }
     }
 

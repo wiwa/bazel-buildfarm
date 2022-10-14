@@ -59,11 +59,11 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Consumer;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.Nullable;
-import lombok.extern.java.Log;
 
-@Log
 class CFCExecFileSystem implements ExecFileSystem {
+  private static final Logger logger = Logger.getLogger(Worker.class.getName());
 
   private final Path root;
   private final CASFileCache fileCache;
@@ -106,7 +106,7 @@ class CFCExecFileSystem implements ExecFileSystem {
     try {
       dirents = readdir(root, /* followSymlinks= */ false, Files.getFileStore(root));
     } catch (IOException e) {
-      log.log(Level.SEVERE, "error reading directory " + root.toString(), e);
+      logger.log(Level.SEVERE, "error reading directory " + root.toString(), e);
     }
 
     ImmutableList.Builder<ListenableFuture<Void>> removeDirectoryFutures = ImmutableList.builder();
@@ -137,13 +137,13 @@ class CFCExecFileSystem implements ExecFileSystem {
   @Override
   public void stop() {
     if (!shutdownAndAwaitTermination(fetchService, 1, MINUTES)) {
-      log.log(Level.SEVERE, "could not terminate fetchService");
+      logger.log(Level.SEVERE, "could not terminate fetchService");
     }
     if (!shutdownAndAwaitTermination(removeDirectoryService, 1, MINUTES)) {
-      log.log(Level.SEVERE, "could not terminate removeDirectoryService");
+      logger.log(Level.SEVERE, "could not terminate removeDirectoryService");
     }
     if (!shutdownAndAwaitTermination(accessRecorder, 1, MINUTES)) {
-      log.log(Level.SEVERE, "could not terminate accessRecorder");
+      logger.log(Level.SEVERE, "could not terminate accessRecorder");
     }
   }
 
@@ -365,7 +365,8 @@ class CFCExecFileSystem implements ExecFileSystem {
     ImmutableList.Builder<String> inputFiles = new ImmutableList.Builder<>();
     ImmutableList.Builder<Digest> inputDirectories = new ImmutableList.Builder<>();
 
-    log.log(Level.FINE, "ExecFileSystem::createExecDir(" + operationName + ") calling fetchInputs");
+    logger.log(
+        Level.FINE, "ExecFileSystem::createExecDir(" + operationName + ") calling fetchInputs");
     Iterable<ListenableFuture<Void>> fetchedFutures =
         fetchInputs(
             execDir,
@@ -417,7 +418,7 @@ class CFCExecFileSystem implements ExecFileSystem {
     rootInputFiles.put(execDir, inputFiles.build());
     rootInputDirectories.put(execDir, inputDirectories.build());
 
-    log.log(
+    logger.log(
         Level.FINE,
         "ExecFileSystem::createExecDir(" + operationName + ") stamping output directories");
     boolean stamped = false;

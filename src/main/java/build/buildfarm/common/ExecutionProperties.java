@@ -66,13 +66,6 @@ public class ExecutionProperties {
   public static final String BLOCK_NETWORK = "block-network";
 
   /**
-   * @field FAKE_HOSTNAME
-   * @brief The exec_property and platform property name for fake hostname.
-   * @details This is decided between client and server. The key value is expected to be a boolean.
-   */
-  public static final String FAKE_HOSTNAME = "fake-hostname";
-
-  /**
    * @field TMPFS
    * @brief The exec_property and platform property name for enabling tmpfs.
    * @details This is decided between client and server. The key value is expected to be a boolean.
@@ -293,4 +286,18 @@ public class ExecutionProperties {
    *     operation queue).
    */
   public static final String POOL = "Pool";
+
+  /**
+   * @field PERSISTENT_WORKER_KEY
+   * @brief Hash of tool inputs from --experiemental_remote_mark_tool_inputs
+   * @details See https://github.com/bazelbuild/bazel/issues/10091
+   */
+  public static final String PERSISTENT_WORKER_KEY = "persistentWorkerKey";
+
+  /**
+   * @field PERSISTENT_WORKER_COMMAND
+   * @brief Command string to start the persistent worker
+   * @details See https://github.com/bazelbuild/bazel/issues/10091
+   */
+  public static final String PERSISTENT_WORKER_COMMAND = "persistentWorkerCommand";
 }

@@ -31,6 +31,4 @@ public interface Admin {
       Integer targetReservedHostsPercent);
 
   void disableHostScaleInProtection(String instanceName);
-
-  void disableHostScaleInProtection(String clusterEndpoint, String instanceIp);
 }

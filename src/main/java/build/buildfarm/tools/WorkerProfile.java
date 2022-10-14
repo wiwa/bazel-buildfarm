@@ -15,19 +15,22 @@
 package build.buildfarm.tools;
 
 import build.buildfarm.common.DigestUtil;
-import build.buildfarm.common.config.BuildfarmConfigs;
 import build.buildfarm.common.config.ShardWorkerOptions;
 import build.buildfarm.common.redis.RedisClient;
 import build.buildfarm.instance.Instance;
 import build.buildfarm.instance.shard.JedisClusterFactory;
 import build.buildfarm.instance.stub.StubInstance;
 import build.buildfarm.v1test.OperationTimesBetweenStages;
+import build.buildfarm.v1test.RedisShardBackplaneConfig;
 import build.buildfarm.v1test.ShardWorker;
+import build.buildfarm.v1test.ShardWorkerConfig;
 import build.buildfarm.v1test.StageInformation;
 import build.buildfarm.v1test.WorkerProfileMessage;
+import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.google.devtools.common.options.OptionsParser;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.TextFormat;
 import com.google.protobuf.util.Durations;
 import com.google.protobuf.util.JsonFormat;
 import io.grpc.ManagedChannel;
@@ -35,6 +38,11 @@ import io.grpc.StatusRuntimeException;
 import io.grpc.netty.NegotiationType;
 import io.grpc.netty.NettyChannelBuilder;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,8 +51,6 @@ import javax.naming.ConfigurationException;
 import redis.clients.jedis.JedisCluster;
 
 class WorkerProfile {
-  private static BuildfarmConfigs configs = BuildfarmConfigs.getInstance();
-
   private static ManagedChannel createChannel(String target) {
     NettyChannelBuilder builder =
         NettyChannelBuilder.forTarget(target).negotiationType(NegotiationType.PLAINTEXT);
@@ -102,6 +108,19 @@ class WorkerProfile {
     }
   }
 
+  private static RedisShardBackplaneConfig toRedisShardBackplaneConfig(
+      Readable input, ShardWorkerOptions options) throws IOException {
+    ShardWorkerConfig.Builder builder = ShardWorkerConfig.newBuilder();
+    TextFormat.merge(input, builder);
+    if (!Strings.isNullOrEmpty(options.root)) {
+      builder.setRoot(options.root);
+    }
+    if (!Strings.isNullOrEmpty(options.publicName)) {
+      builder.setPublicName(options.publicName);
+    }
+    return builder.build().getRedisShardBackplaneConfig();
+  }
+
   @SuppressWarnings("ConstantConditions")
   private static Set<String> getWorkers(String[] args) throws ConfigurationException, IOException {
     OptionsParser parser = OptionsParser.newOptionsParser(ShardWorkerOptions.class);
@@ -110,19 +129,26 @@ class WorkerProfile {
     if (residue.isEmpty()) {
       throw new IllegalArgumentException("Missing Config_PATH");
     }
-    try {
-      configs.loadConfigs(residue.get(3));
-    } catch (IOException e) {
-      System.out.println("Could not parse yml configuration file." + e);
+    Path configPath = Paths.get(residue.get(3));
+    RedisShardBackplaneConfig config = null;
+    try (InputStream configInputStream = Files.newInputStream(configPath)) {
+      config =
+          toRedisShardBackplaneConfig(
+              new InputStreamReader(configInputStream),
+              parser.getOptions(ShardWorkerOptions.class));
+    } catch (Exception e) {
+      e.printStackTrace();
     }
-    RedisClient client = new RedisClient(JedisClusterFactory.create().get());
-    return client.call(jedis -> fetchWorkers(jedis, System.currentTimeMillis()));
+
+    RedisClient client = new RedisClient(JedisClusterFactory.create(config).get());
+    RedisShardBackplaneConfig finalConfig = config;
+    return client.call(jedis -> fetchWorkers(jedis, finalConfig, System.currentTimeMillis()));
   }
 
-  private static Set<String> fetchWorkers(JedisCluster jedis, long now) {
+  private static Set<String> fetchWorkers(
+      JedisCluster jedis, RedisShardBackplaneConfig config, long now) {
     Set<String> workers = Sets.newConcurrentHashSet();
-    for (Map.Entry<String, String> entry :
-        jedis.hgetAll(configs.getBackplane().getWorkersHashName()).entrySet()) {
+    for (Map.Entry<String, String> entry : jedis.hgetAll(config.getWorkersHashName()).entrySet()) {
       String json = entry.getValue();
       try {
         if (json != null) {
@@ -203,7 +229,7 @@ class WorkerProfile {
   }
 
   // how to run the binary: bf-workerprofile WorkerProfile shard SHA256
-  // examples/config.yml
+  // examples/shard-worker.config.example
   public static void main(String[] args) throws Exception {
     workerProfile(args);
   }

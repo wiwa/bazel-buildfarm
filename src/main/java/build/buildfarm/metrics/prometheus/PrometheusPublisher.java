@@ -17,10 +17,10 @@ package build.buildfarm.metrics.prometheus;
 import io.prometheus.client.exporter.HTTPServer;
 import io.prometheus.client.hotspot.DefaultExports;
 import java.io.IOException;
-import lombok.extern.java.Log;
+import java.util.logging.Logger;
 
-@Log
 public class PrometheusPublisher {
+  private static final Logger logger = Logger.getLogger(PrometheusPublisher.class.getName());
   private static HTTPServer server;
 
   public static void startHttpServer(int port) {
@@ -28,12 +28,12 @@ public class PrometheusPublisher {
       if (port > 0) {
         DefaultExports.initialize();
         server = new HTTPServer(port);
-        log.info("Started Prometheus HTTP Server on port " + port);
+        logger.info("Started Prometheus HTTP Server on port " + port);
       } else {
-        log.info("Prometheus port is not configured. HTTP Server will not be started");
+        logger.info("Prometheus port is not configured. HTTP Server will not be started");
       }
     } catch (IOException e) {
-      log.severe("Could not start Prometheus HTTP Server on port " + port);
+      logger.severe("Could not start Prometheus HTTP Server on port " + port);
     }
   }
 

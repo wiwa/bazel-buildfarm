@@ -45,7 +45,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
-import lombok.extern.java.Log;
+import java.util.logging.Logger;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 
 /**
@@ -62,8 +62,14 @@ import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
  *     container" model for action execution. Bazel toolchains expects you to provide container
  *     images when defining platform configurations in bazel.
  */
-@Log
 public class DockerExecutor {
+  /**
+   * @field logger
+   * @brief Logger for the context of the class.
+   * @details Used to log issues with action execution.
+   */
+  private static Logger logger = Logger.getLogger(DockerExecutor.class.getName());
+
   /**
    * @brief Run the action using the docker client and populate the results.
    * @details This will fetch any images as needed, spawn a container for execution, and clean up
@@ -251,7 +257,7 @@ public class DockerExecutor {
     try {
       dockerClient.removeContainerCmd(containerId).withRemoveVolumes(true).withForce(true).exec();
     } catch (Exception e) {
-      log.log(Level.SEVERE, "couldn't shutdown container: ", e);
+      logger.log(Level.SEVERE, "couldn't shutdown container: ", e);
     }
   }
   /**
@@ -312,7 +318,7 @@ public class DockerExecutor {
     // run container creation and log any warnings
     CreateContainerResponse response = createContainerCmd.exec();
     if (response.getWarnings().length != 0) {
-      log.log(Level.WARNING, Arrays.toString(response.getWarnings()));
+      logger.log(Level.WARNING, Arrays.toString(response.getWarnings()));
     }
     // container is ready and started
     return response.getId();
@@ -369,7 +375,7 @@ public class DockerExecutor {
         Utils.unTar(tarStream, new File(path.toString()));
       }
     } catch (Exception e) {
-      log.log(Level.WARNING, "Could not extract file from container: ", e);
+      logger.log(Level.WARNING, "Could not extract file from container: ", e);
     }
   }
 }

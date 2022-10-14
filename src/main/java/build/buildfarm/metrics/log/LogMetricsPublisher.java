@@ -15,36 +15,38 @@
 package build.buildfarm.metrics.log;
 
 import build.bazel.remote.execution.v2.RequestMetadata;
-import build.buildfarm.common.config.BuildfarmConfigs;
 import build.buildfarm.metrics.AbstractMetricsPublisher;
+import build.buildfarm.v1test.MetricsConfig;
 import com.google.longrunning.Operation;
 import java.util.logging.Level;
-import lombok.extern.java.Log;
+import java.util.logging.Logger;
 
-@Log
 public class LogMetricsPublisher extends AbstractMetricsPublisher {
-
-  private static BuildfarmConfigs configs = BuildfarmConfigs.getInstance();
+  private static final Logger logger = Logger.getLogger(LogMetricsPublisher.class.getName());
 
   private static Level logLevel;
 
-  public LogMetricsPublisher() {
-    super(configs.getServer().getClusterId());
-    if (configs.getServer().getMetrics().getLogLevel() != null) {
-      logLevel = Level.parse(configs.getServer().getMetrics().getLogLevel().name());
+  public LogMetricsPublisher(MetricsConfig metricsConfig) {
+    super(metricsConfig.getClusterId());
+    if (!metricsConfig.getLogMetricsConfig().getLogLevel().isEmpty()) {
+      logLevel = Level.parse(metricsConfig.getLogMetricsConfig().getLogLevel());
     } else {
       logLevel = Level.FINEST;
     }
   }
 
+  public LogMetricsPublisher() {
+    super();
+  }
+
   @Override
   public void publishRequestMetadata(Operation operation, RequestMetadata requestMetadata) {
     try {
-      log.log(
+      logger.log(
           logLevel,
           formatRequestMetadataToJson(populateRequestMetadata(operation, requestMetadata)));
     } catch (Exception e) {
-      log.log(
+      logger.log(
           Level.WARNING,
           String.format("Could not publish request metadata to LOG for %s.", operation.getName()),
           e);
@@ -53,6 +55,6 @@ public class LogMetricsPublisher extends AbstractMetricsPublisher {
 
   @Override
   public void publishMetric(String metricName, Object metricValue) {
-    log.log(Level.INFO, String.format("%s: %s", metricName, metricValue.toString()));
+    logger.log(Level.INFO, String.format("%s: %s", metricName, metricValue.toString()));
   }
 }

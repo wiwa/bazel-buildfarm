@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 import jnr.constants.platform.Access;
 import jnr.constants.platform.OpenFlags;
 import jnr.ffi.Pointer;
@@ -44,7 +45,6 @@ import jnr.ffi.types.mode_t;
 import jnr.ffi.types.off_t;
 import jnr.ffi.types.size_t;
 import jnr.ffi.types.uid_t;
-import lombok.extern.java.Log;
 import ru.serce.jnrfuse.ErrorCodes;
 import ru.serce.jnrfuse.FuseException;
 import ru.serce.jnrfuse.FuseFillDir;
@@ -53,8 +53,8 @@ import ru.serce.jnrfuse.struct.FileStat;
 import ru.serce.jnrfuse.struct.FuseFileInfo;
 import ru.serce.jnrfuse.struct.Timespec;
 
-@Log
 public class FuseCAS extends FuseStubFS {
+  private static final Logger logger = Logger.getLogger(FuseCAS.class.getName());
 
   private final Path mountPath;
   private final InputStreamFactory inputStreamFactory;
@@ -396,7 +396,7 @@ public class FuseCAS extends FuseStubFS {
         unmounter.stop();
       }
       if (!mounted) {
-        log.log(Level.INFO, "Mounting FuseCAS");
+        logger.log(Level.INFO, "Mounting FuseCAS");
         String[] fuseOpts = {"-o", "max_write=131072", "-o", "big_writes"};
         try {
           mount(mountPath, /* blocking=*/ false, /* debug=*/ false, /* fuseOpts=*/ fuseOpts);
@@ -410,12 +410,12 @@ public class FuseCAS extends FuseStubFS {
 
   private synchronized void decMounts() {
     if (--mounts == 0 && mountPath != null) {
-      log.log(Level.INFO, "Scheduling FuseCAS unmount in 10s");
+      logger.log(Level.INFO, "Scheduling FuseCAS unmount in 10s");
       unmounter =
           new Watchdog(
               Duration.newBuilder().setSeconds(10).setNanos(0).build(),
               () -> {
-                log.log(Level.INFO, "Unmounting FuseCAS");
+                logger.log(Level.INFO, "Unmounting FuseCAS");
                 umount();
                 mounted = false;
               });
@@ -445,7 +445,7 @@ public class FuseCAS extends FuseStubFS {
         children = builder.build();
         childrenCache.put(digest, children);
       } catch (InvalidProtocolBufferException e) {
-        log.log(Level.SEVERE, "error parsing directory " + DigestUtil.toString(digest), e);
+        logger.log(Level.SEVERE, "error parsing directory " + DigestUtil.toString(digest), e);
       }
     }
     return children;
@@ -747,7 +747,7 @@ public class FuseCAS extends FuseStubFS {
 
   @Override
   public int getxattr(String path, String name, Pointer value, @size_t long size) {
-    // log.log(Level.INFO, "GETXATTR: " + name);
+    // logger.log(Level.INFO, "GETXATTR: " + name);
     // seen security.capability so far...
     return -ErrorCodes.EOPNOTSUPP();
   }

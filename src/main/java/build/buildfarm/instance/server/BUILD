@@ -6,10 +6,9 @@ java_library(
         "OperationsMap.java",
         "WatchFuture.java",
     ],
-    plugins = ["//src/main/java/build/buildfarm/common:lombok"],
     visibility = ["//visibility:public"],
     deps = [
-        "//src/main/java/build/buildfarm/actioncache",
+        "//src/main/java/build/buildfarm/ac",
         "//src/main/java/build/buildfarm/cas",
         "//src/main/java/build/buildfarm/common",
         "//src/main/java/build/buildfarm/instance",
@@ -29,7 +28,6 @@ java_library(
         "@maven//:io_grpc_grpc_protobuf",
         "@maven//:io_grpc_grpc_stub",
         "@maven//:io_netty_netty_codec_http",
-        "@maven//:org_projectlombok_lombok",
         "@remote_apis//:build_bazel_remote_execution_v2_remote_execution_java_proto",
     ],
 )

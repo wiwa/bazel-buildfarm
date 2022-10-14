@@ -1,7 +1,10 @@
 java_library(
     name = "admin",
     srcs = glob(["*.java"]),
-    visibility = ["//visibility:public"],
+    visibility = [
+        ":__subpackages__",
+        "//src/main/java/build/buildfarm/server:__pkg__",
+    ],
     deps = [
         "//src/main/protobuf:build_buildfarm_v1test_buildfarm_java_proto",
         "@googleapis//:google_rpc_code_java_proto",

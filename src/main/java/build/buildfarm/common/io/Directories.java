@@ -37,10 +37,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.logging.Level;
-import lombok.extern.java.Log;
+import java.util.logging.Logger;
 
-@Log
 public class Directories {
+  private static final Logger logger = Logger.getLogger(Directories.class.getName());
 
   private static final Set<PosixFilePermission> writablePerms =
       PosixFilePermissions.fromString("rwxr-xr-x");
@@ -102,7 +102,7 @@ public class Directories {
               try {
                 remove(tmpPath);
               } catch (IOException e) {
-                log.log(Level.SEVERE, "error removing directory " + tmpPath, e);
+                logger.log(Level.SEVERE, "error removing directory " + tmpPath, e);
               }
             },
             null);
@@ -122,7 +122,6 @@ public class Directories {
           @Override
           public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
               throws IOException {
-            // we will *NOT* delete the file on windows if it is still open
             Files.delete(file);
             return FileVisitResult.CONTINUE;
           }

@@ -20,15 +20,15 @@ import build.buildfarm.v1test.QueuedOperation;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import java.util.logging.Level;
-import lombok.extern.java.Log;
+import java.util.logging.Logger;
 
 /**
  * @class ProtoUtils
  * @brief Utilities related to parsing proto data.
  * @details Performs validation and error reporting of proto data.
  */
-@Log
 public class ProtoUtils {
+  private static final Logger logger = Logger.getLogger(ProtoUtils.class.getName());
 
   public static QueuedOperation parseQueuedOperation(
       ByteString queuedOperationBlob, QueueEntry queueEntry) {
@@ -36,7 +36,7 @@ public class ProtoUtils {
     String operationName = queueEntry.getExecuteEntry().getOperationName();
 
     if (queuedOperationBlob == null) {
-      log.log(
+      logger.log(
           Level.WARNING,
           String.format(
               "missing queued operation: %s(%s)",
@@ -46,7 +46,7 @@ public class ProtoUtils {
     try {
       return QueuedOperation.parseFrom(queuedOperationBlob);
     } catch (InvalidProtocolBufferException e) {
-      log.log(
+      logger.log(
           Level.WARNING,
           String.format(
               "invalid queued operation: %s(%s).  Cannot parse operation blob: %s",

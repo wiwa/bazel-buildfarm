@@ -59,7 +59,7 @@ import build.bazel.remote.execution.v2.ResultsCachePolicy;
 import build.bazel.remote.execution.v2.ServerCapabilities;
 import build.bazel.remote.execution.v2.SymlinkAbsolutePathStrategy;
 import build.bazel.remote.execution.v2.SymlinkNode;
-import build.buildfarm.actioncache.ActionCache;
+import build.buildfarm.ac.ActionCache;
 import build.buildfarm.cas.ContentAddressableStorage;
 import build.buildfarm.cas.ContentAddressableStorage.Blob;
 import build.buildfarm.cas.DigestMismatchException;
@@ -121,7 +121,6 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.NoSuchFileException;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Stack;
@@ -136,10 +135,9 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 import javax.annotation.Nullable;
-import lombok.extern.java.Log;
 
-@Log
 public abstract class AbstractServerInstance implements Instance {
+  private static final Logger logger = Logger.getLogger(AbstractServerInstance.class.getName());
 
   private final String name;
   protected final ContentAddressableStorage contentAddressableStorage;
@@ -403,7 +401,7 @@ public abstract class AbstractServerInstance implements Instance {
   }
 
   @Override
-  public ListenableFuture<List<Response>> getAllBlobsFuture(Iterable<Digest> digests) {
+  public ListenableFuture<Iterable<Response>> getAllBlobsFuture(Iterable<Digest> digests) {
     return contentAddressableStorage.getAllFuture(digests);
   }
 
@@ -650,7 +648,7 @@ public abstract class AbstractServerInstance implements Instance {
             });
         return immediateFuture(actualDigestBuilder.build());
       } catch (Exception e) {
-        log.log(Level.WARNING, "download attempt failed", e);
+        logger.log(Level.WARNING, "download attempt failed", e);
         // ignore?
       }
     }
@@ -956,7 +954,7 @@ public abstract class AbstractServerInstance implements Instance {
         getLogger().log(Level.SEVERE, "no rpc status from exception", cause);
         status = asExecutionStatus(cause);
       } else if (Code.forNumber(status.getCode()) == Code.DEADLINE_EXCEEDED) {
-        log.log(
+        logger.log(
             Level.WARNING, "an rpc status was thrown with DEADLINE_EXCEEDED, discarding it", cause);
         status =
             com.google.rpc.Status.newBuilder()
@@ -1402,7 +1400,7 @@ public abstract class AbstractServerInstance implements Instance {
           @SuppressWarnings("NullableProblems")
           @Override
           public void onFailure(Throwable t) {
-            log.log(
+            logger.log(
                 Level.WARNING,
                 format("action cache check of %s failed", DigestUtil.toString(actionDigest)),
                 t);
@@ -1419,7 +1417,7 @@ public abstract class AbstractServerInstance implements Instance {
       try {
         return metadata.unpack(QueuedOperationMetadata.class);
       } catch (InvalidProtocolBufferException e) {
-        log.log(Level.SEVERE, format("invalid executing operation metadata %s", name), e);
+        logger.log(Level.SEVERE, format("invalid executing operation metadata %s", name), e);
       }
     }
     return null;
@@ -1431,7 +1429,7 @@ public abstract class AbstractServerInstance implements Instance {
       try {
         return metadata.unpack(ExecutingOperationMetadata.class);
       } catch (InvalidProtocolBufferException e) {
-        log.log(Level.SEVERE, format("invalid executing operation metadata %s", name), e);
+        logger.log(Level.SEVERE, format("invalid executing operation metadata %s", name), e);
       }
     }
     return null;
@@ -1443,7 +1441,7 @@ public abstract class AbstractServerInstance implements Instance {
       try {
         return metadata.unpack(CompletedOperationMetadata.class);
       } catch (InvalidProtocolBufferException e) {
-        log.log(Level.SEVERE, format("invalid completed operation metadata %s", name), e);
+        logger.log(Level.SEVERE, format("invalid completed operation metadata %s", name), e);
       }
     }
     return null;
@@ -1489,7 +1487,7 @@ public abstract class AbstractServerInstance implements Instance {
     try {
       return operation.getMetadata().unpack(ExecuteOperationMetadata.class);
     } catch (InvalidProtocolBufferException e) {
-      log.log(
+      logger.log(
           Level.SEVERE, format("invalid execute operation metadata %s", operation.getName()), e);
     }
     return null;
@@ -1507,7 +1505,7 @@ public abstract class AbstractServerInstance implements Instance {
             try {
               future.set(parser.parseFrom(blob));
             } catch (InvalidProtocolBufferException e) {
-              log.log(
+              logger.log(
                   Level.WARNING,
                   format("expect parse for %s failed", DigestUtil.toString(digest)),
                   e);
@@ -1521,7 +1519,7 @@ public abstract class AbstractServerInstance implements Instance {
             Status status = Status.fromThrowable(t);
             // NOT_FOUNDs are not notable enough to log independently
             if (status.getCode() != io.grpc.Status.Code.NOT_FOUND) {
-              log.log(
+              logger.log(
                   Level.WARNING, format("expect for %s failed", DigestUtil.toString(digest)), t);
             }
             future.setException(t);
