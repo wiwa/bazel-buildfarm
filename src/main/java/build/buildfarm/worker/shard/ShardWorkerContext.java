@@ -240,7 +240,7 @@ class ShardWorkerContext implements WorkerContext {
           } else {
             operationPollerCounter.inc();
             logger.log(
-                Level.INFO, format("%s: poller: Completed Poll for %s: OK", name, operationName));
+                Level.FINER, format("%s: poller: Completed Poll for %s: OK", name, operationName));
           }
           return success;
         },
