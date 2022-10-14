@@ -22,6 +22,8 @@ import build.bazel.remote.execution.v2.ActionResult;
 import build.buildfarm.worker.resources.ResourceLimits;
 import persistent.bazel.client.WorkerKey;
 
+import static persistent.bazel.client.PersistentWorker.PERSISTENT_WORKER_FLAG;
+
 /**
  * Responsible for returning information just like Executor/DockerExecutor.
  */
@@ -34,8 +36,6 @@ public class PersistentExecutor {
   private static final ProtoCoordinator coordinator = ProtoCoordinator.ofCommonsPool(getMaxWorkersPerKey());
 
   static final Path workRootsDir = Paths.get("/tmp/worker/persistent/");
-
-  static final String PERSISTENT_WORKER_FLAG = "--persistent_worker";
 
   static final String JAVABUILDER_JAR = "external/remote_java_tools/java_tools/JavaBuilder_deploy.jar";
 

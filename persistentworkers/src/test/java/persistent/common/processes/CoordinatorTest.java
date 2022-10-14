@@ -7,6 +7,7 @@ import org.junit.runners.JUnit4;
 import persistent.common.Coordinator;
 import persistent.common.Coordinator.SimpleCoordinator;
 import persistent.common.MapPool;
+import persistent.common.ObjectPool;
 import persistent.common.Worker;
 import persistent.common.CtxAround.Id;
 
@@ -19,12 +20,19 @@ public class CoordinatorTest {
   @Test
   public void simpleTestWorks() throws Exception {
 
-    MapPool<String, Worker<Integer, String>> spool = new MapPool<>(key -> String::valueOf);
+    // Creates an objectpool that uses Strings as a Key for its Workers
+    // Workers increment an integer and returns its string value.
+    ObjectPool<String, Worker<Integer, String>> spool = new MapPool<>(key -> new Worker<Integer, String>() {
+      @Override
+      public String doWork(Integer request) {
+        return String.valueOf(request + 1);
+      }
+    });
 
     SimpleCoordinator<String, Integer, String, Worker<Integer, String>> pc =
         Coordinator.simple(spool);
 
-    assertThat(pc.runRequest("asdf", Id.of(1)))
-        .isEqualTo("1");
+    assertThat(pc.runRequest("someWorkerKey", Id.of(1)))
+        .isEqualTo(Id.of("2"));
   }
 }

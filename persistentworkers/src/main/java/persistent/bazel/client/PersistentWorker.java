@@ -29,6 +29,11 @@ import persistent.common.processes.ProcessWrapper;
  */
 public class PersistentWorker implements Worker<WorkRequest, WorkResponse> {
 
+  /**
+   * Services supporting being run as persistent workers need to parse this flag
+   */
+  public static final String PERSISTENT_WORKER_FLAG = "--persistent_worker";
+
   private static final Logger logger = Logger.getLogger(PersistentWorker.class.getName());
 
   public static final String TOOL_INPUT_SUBDIR = "tool_inputs";

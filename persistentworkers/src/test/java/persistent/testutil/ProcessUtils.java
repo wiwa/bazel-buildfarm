@@ -8,18 +8,23 @@ import java.nio.file.Paths;
 
 import org.apache.commons.io.IOUtils;
 
+import persistent.bazel.client.PersistentWorker;
 import persistent.common.processes.JavaProcessWrapper;
 
 import static com.google.common.truth.Truth.assertThat;
 
 public class ProcessUtils {
 
+  /**
+   * Creates a new java process with the specified classpath and classname (with the main method),
+   *  passing along the --persistent_worker flag.
+   */
   public static JavaProcessWrapper spawnPersistentWorkerProcess(String classpath, String className) throws IOException {
     JavaProcessWrapper jpw = new JavaProcessWrapper(
         Paths.get("."),
         classpath,
         className,
-        new String[]{"--persistent_worker"}
+        new String[]{PersistentWorker.PERSISTENT_WORKER_FLAG}
     );
     assertThat(jpw.isAlive()).isTrue();
     return jpw;

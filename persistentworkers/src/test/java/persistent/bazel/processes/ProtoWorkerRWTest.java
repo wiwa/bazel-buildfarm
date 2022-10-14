@@ -22,24 +22,6 @@ public class ProtoWorkerRWTest {
 
   @SuppressWarnings("CheckReturnValue")
   @Test
-  public void simpleTestWorks() throws Exception {
-    Path workDir = Files.createTempDirectory("test-workdir-");
-
-    String filename = "adder-bin_deploy.jar";
-
-    Path jarPath = ProcessUtils.retrieveFileResource(
-        getClass().getClassLoader(),
-        filename,
-        workDir.resolve(filename)
-    );
-
-    assertThat(Files.exists(jarPath)).isTrue();
-
-    assertThat(Files.size(jarPath)).isAtLeast(11000000L); // at least 11mb
-  }
-
-  @SuppressWarnings("CheckReturnValue")
-  @Test
   public void canAddWithAdder() throws Exception {
     Path workDir = Files.createTempDirectory("test-workdir-");
 

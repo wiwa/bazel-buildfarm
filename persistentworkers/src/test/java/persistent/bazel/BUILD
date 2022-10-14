@@ -11,9 +11,19 @@ COMMON_DEPS = [
 ]
 
 java_test(
+  name = "TestDepsTest",
+  size = "small",
+  srcs = ["processes/TestDepsTest.java"],
+  resources = [
+    "//persistentworkers/examples/src/main/java:adder-bin_deploy.jar"
+  ],
+  deps = COMMON_DEPS,
+)
+
+java_test(
   name = "ProtoWorkerRWTest",
   size = "small",
-  srcs = glob(["**/*.java"]),
+  srcs = ["processes/ProtoWorkerRWTest.java"],
   resources = [
     "//persistentworkers/examples/src/main/java:adder-bin_deploy.jar"
   ],
@@ -23,7 +33,7 @@ java_test(
 java_test(
   name = "PersistentWorkerTest",
   size = "small",
-  srcs = glob(["**/*.java"]),
+  srcs = ["processes/PersistentWorkerTest.java"],
   resources = [
     "//persistentworkers/examples/src/main/java:adder-bin_deploy.jar"
   ],
@@ -33,7 +43,7 @@ java_test(
 java_test(
   name = "ProtoWorkerCoordinatorTest",
   size = "small",
-  srcs = glob(["**/*.java"]),
+  srcs = ["processes/ProtoWorkerCoordinatorTest.java"],
   resources = [
     "//persistentworkers/examples/src/main/java:adder-bin_deploy.jar"
   ],
