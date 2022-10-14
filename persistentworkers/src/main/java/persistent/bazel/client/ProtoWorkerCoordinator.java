@@ -7,6 +7,7 @@ import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
 
 import org.apache.commons.pool2.impl.GenericKeyedObjectPool;
 
+// TODO: Move to tests?
 public class ProtoWorkerCoordinator {
 
   private final GenericKeyedObjectPool<WorkerKey, PersistentWorker> workerPool;
@@ -17,7 +18,7 @@ public class ProtoWorkerCoordinator {
 
   public static ProtoWorkerCoordinator ofCommonsPool() {
     return new ProtoWorkerCoordinator(
-        new CommonsWorkerPool(PersistentWorker.Supervisor.simple(), 4));
+        new CommonsWorkerPool(WorkerSupervisor.simple(), 4));
   }
 
   public FullResponse runRequest(WorkerKey workerKey, WorkRequest request) throws Exception {

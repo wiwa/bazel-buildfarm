@@ -1,4 +1,5 @@
-Implements Bazel's Persistent Worker idea: https://bazel.build/remote/persistent
+Implements Bazel's Persistent Worker idea, using interfaces from our own `:persistent-common`: https://bazel.build/remote/persistent
+We use Apache Commons Pool (commons-pool2) as the object pool backend.
 
 Much of the code is ripped from Bazel itself, with a few adjustments specifically for Buildfarm.
 

@@ -19,6 +19,7 @@ import persistent.bazel.client.CommonsWorkerPool;
 import persistent.bazel.client.PersistentWorker;
 import persistent.bazel.client.WorkCoordinator;
 import persistent.bazel.client.WorkerKey;
+import persistent.bazel.client.WorkerSupervisor;
 
 import static persistent.bazel.client.PersistentWorker.TOOL_INPUT_SUBDIR;
 
@@ -52,7 +53,7 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
     super(workerPool);
   }
 
-  public ProtoCoordinator(PersistentWorker.Supervisor supervisor, int maxWorkersPerKey) {
+  public ProtoCoordinator(WorkerSupervisor supervisor, int maxWorkersPerKey) {
     super(new CommonsWorkerPool(supervisor, maxWorkersPerKey));
   }
 
@@ -61,7 +62,7 @@ public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, C
   //    and presumably there might be writes to tool inputs?
   // Tool inputs which are absolute-paths (e.g. /usr/bin/...) are not affected
   public static ProtoCoordinator ofCommonsPool(int maxWorkersPerKey) {
-    PersistentWorker.Supervisor loadToolsOnCreate = new PersistentWorker.Supervisor() {
+    WorkerSupervisor loadToolsOnCreate = new WorkerSupervisor() {
       @Override
       public PersistentWorker create(WorkerKey workerKey) throws Exception {
         Path keyExecRoot = workerKey.getExecRoot();

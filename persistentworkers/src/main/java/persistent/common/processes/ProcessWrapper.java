@@ -24,7 +24,9 @@ import static com.google.common.base.Preconditions.checkNotNull;
 /**
  * Wraps a process, giving it a (possible different) working directory and environment variables.
  * Redirects stderr to a file under its working dir using a random uuid, i.e. "{{randomUUID()}}.stderr"
- * Exposes its stdin as OutputStream and stdout as InputStream
+ * Exposes its stdin as OutputStream and stdout as InputStream.
+ *
+ * Constructor immediately starts a process and checks isAlive() right after.
  */
 public class ProcessWrapper implements Closeable {
 
