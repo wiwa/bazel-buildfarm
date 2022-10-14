@@ -45,8 +45,7 @@ public class Keymaker {
         combinedToolsHash,
         hashedTools,
         sandboxed,
-        cancellable,
-        opRoot
+        cancellable
     );
   }
 

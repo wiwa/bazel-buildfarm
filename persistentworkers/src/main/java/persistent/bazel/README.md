@@ -1,6 +1,6 @@
 Implements Bazel's Persistent Worker idea: https://bazel.build/remote/persistent
 
-Much of the code is ripped from Bazel itself.
+Much of the code is ripped from Bazel itself, with a few adjustments specifically for Buildfarm.
 
 Remote persistent workers (for Buildfarm) rely on the `--experimental_mark_tool_inputs` proposal:
 https://github.com/bazelbuild/proposals/blob/main/designs/2021-03-06-remote-persistent-workers.md
