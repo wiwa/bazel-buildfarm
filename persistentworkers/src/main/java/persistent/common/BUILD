@@ -3,9 +3,8 @@ java_library(
     srcs = glob(["**/*.java"]),
     visibility = ["//visibility:public"],
     deps = [
-        "//persistentworkers/src/main/java/persistent/common/util:util",
+        "//persistentworkers/src/main/java/persistent/common/util",
         "@bazel_tools//src/main/protobuf:worker_protocol_java_proto",
-        "@maven//:org_apache_commons_commons_pool2",
         "@maven//:com_github_pcj_google_options",
         "@maven//:com_google_guava_guava",
         "@maven//:com_google_protobuf_protobuf_java",
@@ -17,5 +16,6 @@ java_library(
         "@maven//:io_grpc_grpc_netty",
         "@maven//:io_grpc_grpc_protobuf",
         "@maven//:io_grpc_grpc_stub",
+        "@maven//:org_apache_commons_commons_pool2",
     ],
 )
