@@ -11,9 +11,9 @@ import persistent.bazel.client.WorkerKey;
 
 public class WorkerUtils {
 
-  public static WorkerKey emptyWorkerKey(Path execDir, ImmutableList<String> initArgs) {
+  public static WorkerKey emptyWorkerKey(Path execDir, ImmutableList<String> initCmd) {
     return new WorkerKey(
-        initArgs,
+        initCmd,
         ImmutableList.of(),
         ImmutableMap.of(),
         execDir,

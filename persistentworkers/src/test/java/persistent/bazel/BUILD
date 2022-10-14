@@ -39,13 +39,3 @@ java_test(
   ],
   deps = COMMON_DEPS,
 )
-
-java_test(
-  name = "ProtoWorkerCoordinatorTest",
-  size = "small",
-  srcs = ["processes/ProtoWorkerCoordinatorTest.java"],
-  resources = [
-    "//persistentworkers/examples/src/main/java:adder-bin_deploy.jar"
-  ],
-  deps = COMMON_DEPS,
-)

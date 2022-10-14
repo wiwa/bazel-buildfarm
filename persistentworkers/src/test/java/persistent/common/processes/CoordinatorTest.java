@@ -6,10 +6,10 @@ import org.junit.runners.JUnit4;
 
 import persistent.common.Coordinator;
 import persistent.common.Coordinator.SimpleCoordinator;
+import persistent.common.CtxAround.Id;
 import persistent.common.MapPool;
 import persistent.common.ObjectPool;
 import persistent.common.Worker;
-import persistent.common.CtxAround.Id;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -22,12 +22,13 @@ public class CoordinatorTest {
 
     // Creates an objectpool that uses Strings as a Key for its Workers
     // Workers increment an integer and returns its string value.
-    ObjectPool<String, Worker<Integer, String>> spool = new MapPool<>(key -> new Worker<Integer, String>() {
-      @Override
-      public String doWork(Integer request) {
-        return String.valueOf(request + 1);
-      }
-    });
+    ObjectPool<String, Worker<Integer, String>> spool = new MapPool<>(
+        key -> new Worker<Integer, String>() {
+          @Override
+          public String doWork(Integer request) {
+            return String.valueOf(request + 1);
+          }
+        });
 
     SimpleCoordinator<String, Integer, String, Worker<Integer, String>> pc =
         Coordinator.simple(spool);
