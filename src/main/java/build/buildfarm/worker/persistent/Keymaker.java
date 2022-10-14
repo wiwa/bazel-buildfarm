@@ -13,6 +13,7 @@ import com.google.common.hash.Hasher;
 import com.google.common.hash.Hashing;
 
 import persistent.bazel.client.PersistentWorker;
+import persistent.bazel.client.WorkerFilesHash;
 import persistent.bazel.client.WorkerKey;
 
 public class Keymaker {
@@ -34,7 +35,7 @@ public class Keymaker {
     Path toolsRoot = workRoot.resolve(PersistentWorker.TOOL_INPUT_SUBDIR);
 
     SortedMap<Path, HashCode> hashedTools = workerFilesWithHashes(workerFiles);
-    HashCode combinedToolsHash = workerFilesCombinedHash(toolsRoot, hashedTools);
+    HashCode combinedToolsHash = WorkerFilesHash.getCombinedHash(toolsRoot, hashedTools);
 
     return new WorkerKey(
         workerInitCmd,
