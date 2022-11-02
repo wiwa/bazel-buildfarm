@@ -1,0 +1,1728 @@
+diff --git a/src/main/java/build/buildfarm/common/ExecutionProperties.java b/src/main/java/build/buildfarm/common/ExecutionProperties.java
+index 2f7bffee..4cc7c6ba 100644
+--- a/src/main/java/build/buildfarm/common/ExecutionProperties.java
++++ b/src/main/java/build/buildfarm/common/ExecutionProperties.java
+@@ -286,4 +286,18 @@ public class ExecutionProperties {
+    *     operation queue).
+    */
+   public static final String POOL = "Pool";
++
++  /**
++   * @field PERSISTENT_WORKER_KEY
++   * @brief Hash of tool inputs from --experiemental_remote_mark_tool_inputs
++   * @details See https://github.com/bazelbuild/bazel/issues/10091
++   */
++  public static final String PERSISTENT_WORKER_KEY = "persistentWorkerKey";
++
++  /**
++   * @field PERSISTENT_WORKER_COMMAND
++   * @brief Command string to start the persistent worker
++   * @details See https://github.com/bazelbuild/bazel/issues/10091
++   */
++  public static final String PERSISTENT_WORKER_COMMAND = "persistentWorkerCommand";
+ }
+diff --git a/src/main/java/build/buildfarm/worker/BUILD b/src/main/java/build/buildfarm/worker/BUILD
+index a7c2be3e..c2534cf9 100644
+--- a/src/main/java/build/buildfarm/worker/BUILD
++++ b/src/main/java/build/buildfarm/worker/BUILD
+@@ -3,11 +3,16 @@ java_library(
+     srcs = glob(["*.java"]),
+     visibility = ["//visibility:public"],
+     deps = [
++        "//persistentworkers/src/main/java/persistent/bazel:bazel-persistent-workers",
++        "//persistentworkers/src/main/java/persistent/common:persistent-common",
+         "//src/main/java/build/buildfarm/common",
+         "//src/main/java/build/buildfarm/instance",
+         "//src/main/java/build/buildfarm/instance/stub",
++        "//src/main/java/build/buildfarm/worker/persistent",
+         "//src/main/java/build/buildfarm/worker/resources",
++        "//src/main/java/build/buildfarm/worker/util",
+         "//src/main/protobuf:build_buildfarm_v1test_buildfarm_java_proto",
++        "//third_party/bazel/src/main/protobuf:worker_protocol_java_proto",
+         "@bazel//src/main/protobuf:execution_statistics_java_proto",
+         "@googleapis//:google_rpc_code_java_proto",
+         "@googleapis//:google_rpc_error_details_java_proto",
+diff --git a/src/main/java/build/buildfarm/worker/Executor.java b/src/main/java/build/buildfarm/worker/Executor.java
+index 0e67341c..e18fee11 100644
+--- a/src/main/java/build/buildfarm/worker/Executor.java
++++ b/src/main/java/build/buildfarm/worker/Executor.java
+@@ -14,14 +14,31 @@
+ 
+ package build.buildfarm.worker;
+ 
+-import static build.buildfarm.v1test.ExecutionPolicy.PolicyCase.WRAPPER;
+-import static com.google.common.collect.Maps.uniqueIndex;
+-import static com.google.protobuf.util.Durations.add;
+-import static com.google.protobuf.util.Durations.compare;
+-import static com.google.protobuf.util.Durations.fromSeconds;
+-import static java.lang.String.format;
+-import static java.util.concurrent.TimeUnit.DAYS;
+-import static java.util.concurrent.TimeUnit.MICROSECONDS;
++import java.io.FileInputStream;
++import java.io.IOException;
++import java.nio.file.Path;
++import java.util.ArrayList;
++import java.util.Iterator;
++import java.util.List;
++import java.util.Map;
++import java.util.concurrent.TimeUnit;
++import java.util.logging.Level;
++import java.util.logging.Logger;
++
++import com.github.dockerjava.api.DockerClient;
++import com.github.dockerjava.core.DockerClientBuilder;
++import com.google.common.base.Stopwatch;
++import com.google.common.collect.ImmutableList;
++import com.google.common.collect.ImmutableMap;
++import com.google.devtools.build.lib.shell.Protos.ExecutionStatistics;
++import com.google.longrunning.Operation;
++import com.google.protobuf.Any;
++import com.google.protobuf.ByteString;
++import com.google.protobuf.Duration;
++import com.google.protobuf.InvalidProtocolBufferException;
++import com.google.protobuf.util.Durations;
++import com.google.protobuf.util.Timestamps;
++import com.google.rpc.Code;
+ 
+ import build.bazel.remote.execution.v2.Action;
+ import build.bazel.remote.execution.v2.ActionResult;
+@@ -37,32 +54,23 @@ import build.buildfarm.common.Write.NullWrite;
+ import build.buildfarm.v1test.ExecutingOperationMetadata;
+ import build.buildfarm.v1test.ExecutionPolicy;
+ import build.buildfarm.v1test.ExecutionWrapper;
++import build.buildfarm.v1test.Tree;
+ import build.buildfarm.worker.WorkerContext.IOResource;
++import build.buildfarm.worker.persistent.PersistentExecutor;
++import build.buildfarm.worker.persistent.WorkFilesContext;
+ import build.buildfarm.worker.resources.ResourceLimits;
+-import com.github.dockerjava.api.DockerClient;
+-import com.github.dockerjava.core.DockerClientBuilder;
+-import com.google.common.base.Stopwatch;
+-import com.google.common.collect.ImmutableList;
+-import com.google.devtools.build.lib.shell.Protos.ExecutionStatistics;
+-import com.google.longrunning.Operation;
+-import com.google.protobuf.Any;
+-import com.google.protobuf.ByteString;
+-import com.google.protobuf.Duration;
+-import com.google.protobuf.InvalidProtocolBufferException;
+-import com.google.protobuf.util.Durations;
+-import com.google.protobuf.util.Timestamps;
+-import com.google.rpc.Code;
+ import io.grpc.Deadline;
+-import java.io.FileInputStream;
+-import java.io.IOException;
+-import java.nio.file.Path;
+-import java.util.ArrayList;
+-import java.util.Iterator;
+-import java.util.List;
+-import java.util.Map;
+-import java.util.concurrent.TimeUnit;
+-import java.util.logging.Level;
+-import java.util.logging.Logger;
++
++import static java.lang.String.format;
++import static java.util.concurrent.TimeUnit.DAYS;
++import static java.util.concurrent.TimeUnit.MICROSECONDS;
++
++import static com.google.common.collect.Maps.uniqueIndex;
++import static com.google.protobuf.util.Durations.add;
++import static com.google.protobuf.util.Durations.compare;
++import static com.google.protobuf.util.Durations.fromSeconds;
++
++import static build.buildfarm.v1test.ExecutionPolicy.PolicyCase.WRAPPER;
+ 
+ class Executor {
+   private static final int INCOMPLETE_EXIT_CODE = -1;
+@@ -75,7 +83,8 @@ class Executor {
+   private boolean wasErrored = false;
+ 
+   Executor(
+-      WorkerContext workerContext, OperationContext operationContext, ExecuteActionStage owner) {
++      WorkerContext workerContext, OperationContext operationContext, ExecuteActionStage owner
++  ) {
+     this.workerContext = workerContext;
+     this.operationContext = operationContext;
+     this.owner = owner;
+@@ -197,7 +206,8 @@ class Executor {
+       ResourceLimits limits,
+       Iterable<ExecutionPolicy> policies,
+       Duration timeout,
+-      Stopwatch stopwatch)
++      Stopwatch stopwatch
++  )
+       throws InterruptedException {
+     /* execute command */
+     logger.log(Level.FINE, "Executor: Operation " + operation.getName() + " Executing command");
+@@ -218,8 +228,8 @@ class Executor {
+     ImmutableList.Builder<String> arguments = ImmutableList.builder();
+     Code statusCode;
+     try (IOResource resource =
+-        workerContext.limitExecution(
+-            operationName, arguments, operationContext.command, workingDirectory)) {
++             workerContext.limitExecution(
++                 operationName, arguments, operationContext.command, workingDirectory)) {
+       for (ExecutionPolicy policy : policies) {
+         if (policy.getPolicyCase() == WRAPPER) {
+           arguments.addAll(transformWrapper(policy.getWrapper()));
+@@ -283,7 +293,8 @@ class Executor {
+         "Executor(claim)",
+         operationContext.queueEntry,
+         ExecutionStage.Value.EXECUTING,
+-        () -> {},
++        () -> {
++        },
+         Deadline.after(10, DAYS));
+ 
+     resultBuilder
+@@ -411,8 +422,22 @@ class Executor {
+       List<EnvironmentVariable> environmentVariables,
+       ResourceLimits limits,
+       Duration timeout,
+-      ActionResult.Builder resultBuilder)
++      ActionResult.Builder resultBuilder
++  )
+       throws IOException, InterruptedException {
++
++    StringBuilder sb = new StringBuilder();
++    sb.append("======<");
++    sb.append("Calling executeCommand with:");
++    sb.append("operationName=" + operationName);
++    sb.append("execDir=" + execDir.toAbsolutePath());
++    sb.append("arguments=" + ImmutableList.copyOf(arguments));
++    sb.append("environmentVariables=" + ImmutableList.copyOf(environmentVariables));
++    sb.append("limits.unusedProperties=" + ImmutableMap.copyOf(limits.unusedProperties));
++    sb.append("timeout=" + timeout);
++    sb.append("======>");
++    logger.fine(sb.toString());
++
+     ProcessBuilder processBuilder =
+         new ProcessBuilder(arguments).directory(execDir.toAbsolutePath().toFile());
+ 
+@@ -421,16 +446,50 @@ class Executor {
+     for (EnvironmentVariable environmentVariable : environmentVariables) {
+       environment.put(environmentVariable.getName(), environmentVariable.getValue());
+     }
+-    for (Map.Entry<String, String> environmentVariable :
+-        limits.extraEnvironmentVariables.entrySet()) {
+-      environment.put(environmentVariable.getKey(), environmentVariable.getValue());
+-    }
++
++    environment.putAll(limits.extraEnvironmentVariables);
+ 
+     // allow debugging before an execution
+     if (limits.debugBeforeExecution) {
++      // TODO this should not be using ProcessBuilder; current it uses it like a context
+       return ExecutionDebugger.performBeforeExecutionDebug(processBuilder, limits, resultBuilder);
+     }
+ 
++    boolean usePersistentWorker = !limits.persistentWorkerKey.isEmpty();
++
++    // boolean isJavaBuilder = arguments.contains(
++    //     "external/remote_java_tools/java_tools/JavaBuilder_deploy.jar");
++    // boolean isScalac = arguments.size() > 1 && arguments.get(0).endsWith("scalac/scalac");
++    // usePersistentWorker = usePersistentWorker || isJavaBuilder || isScalac;
++
++    if (usePersistentWorker) {
++      logger.log(Level.FINE, "");
++      logger.log(Level.FINE, "usePersistentWorker; got persistentWorkerCommand of : " + limits.persistentWorkerCommand);
++
++      Tree execTree = workerContext.getQueuedOperation(operationContext.queueEntry).getTree();
++
++      WorkFilesContext filesContext = new WorkFilesContext(
++          execDir,
++          execTree,
++          ImmutableList.copyOf(operationContext.command.getOutputPathsList()),
++          ImmutableList.copyOf(operationContext.command.getOutputFilesList()),
++          ImmutableList.copyOf(operationContext.command.getOutputDirectoriesList())
++      );
++
++      return PersistentExecutor.runOnPersistentWorker(
++          limits.persistentWorkerCommand,
++          filesContext,
++          operationName,
++          ImmutableList.copyOf(arguments),
++          ImmutableMap.copyOf(environment),
++          limits,
++          timeout,
++          resultBuilder
++      );
++    } else {
++      logger.log(Level.FINE, "don't usePersistentWorker");
++    }
++
+     // run the action under docker
+     if (limits.containerSettings.enabled) {
+       DockerClient dockerClient = DockerClientBuilder.getInstance().build();
+@@ -448,6 +507,26 @@ class Executor {
+       return DockerExecutor.runActionWithDocker(dockerClient, settings, resultBuilder);
+     }
+ 
++    return executeCommandNormally(
++        processBuilder,
++        operationName,
++        execDir,
++        limits,
++        timeout,
++        resultBuilder
++    );
++  }
++
++  private Code executeCommandNormally(
++      ProcessBuilder processBuilder,
++      String operationName,
++      Path execDir,
++      ResourceLimits limits,
++      Duration timeout,
++      ActionResult.Builder resultBuilder
++  )
++      throws IOException, InterruptedException {
++        
+     long startNanoTime = System.nanoTime();
+     Process process;
+     try {
+@@ -554,5 +633,6 @@ class Executor {
+     }
+ 
+     return statusCode;
++
+   }
+ }
+diff --git a/src/main/java/build/buildfarm/worker/Utils.java b/src/main/java/build/buildfarm/worker/Utils.java
+index 48d32e4d..9eedaa10 100644
+--- a/src/main/java/build/buildfarm/worker/Utils.java
++++ b/src/main/java/build/buildfarm/worker/Utils.java
+@@ -14,16 +14,18 @@
+ 
+ package build.buildfarm.worker;
+ 
+-import static build.buildfarm.common.io.Utils.stat;
+-
+-import build.buildfarm.common.io.FileStatus;
+ import java.io.IOException;
+ import java.nio.file.FileStore;
+ import java.nio.file.NoSuchFileException;
+ import java.nio.file.Path;
+ 
++import build.buildfarm.common.io.FileStatus;
++
++import static build.buildfarm.common.io.Utils.stat;
++
+ public final class Utils {
+-  private Utils() {}
++  private Utils() {
++  }
+ 
+   public static FileStatus statIfFound(Path path, boolean followSymlinks, FileStore fileStore) {
+     try {
+@@ -36,4 +38,15 @@ public final class Utils {
+       throw new IllegalStateException(e);
+     }
+   }
++
++  // As per JavaBuilder, @@ will escape @
++  public static boolean isFlagFile(String file) {
++    return file.startsWith("@") && !file.startsWith("@@");
++  }
++
++  public static String resolveFlagFiles(Path root, String arg) {
++    return isFlagFile(arg)
++        ? "@" + root.resolve(arg.substring(1)).toAbsolutePath()
++        : arg;
++  }
+ }
+diff --git a/src/main/java/build/buildfarm/worker/persistent/BUILD b/src/main/java/build/buildfarm/worker/persistent/BUILD
+new file mode 100644
+index 00000000..ff02d896
+--- /dev/null
++++ b/src/main/java/build/buildfarm/worker/persistent/BUILD
+@@ -0,0 +1,29 @@
++java_library(
++  name = "persistent",
++  srcs = glob(["*.java"]),
++  visibility = ["//visibility:public"],
++  deps = [
++    "//persistentworkers/src/main/java/persistent/bazel:bazel-persistent-workers",
++    "//persistentworkers/src/main/java/persistent/common:persistent-common",
++    "//persistentworkers/src/main/java/persistent/common/util",
++    "//src/main/java/build/buildfarm/common",
++    "//src/main/java/build/buildfarm/worker/resources",
++    "//src/main/java/build/buildfarm/worker/util",
++    "//src/main/protobuf:build_buildfarm_v1test_buildfarm_java_proto",
++    "//third_party/bazel/src/main/protobuf:worker_protocol_java_proto",
++    "@maven//:com_google_api_grpc_proto_google_common_protos",
++    "@maven//:com_google_guava_guava",
++    "@maven//:com_google_protobuf_protobuf_java",
++    "@maven//:com_google_protobuf_protobuf_java_util",
++    "@maven//:commons_io_commons_io",
++    "@maven//:io_grpc_grpc_api",
++    "@maven//:io_grpc_grpc_context",
++    "@maven//:io_grpc_grpc_core",
++    "@maven//:io_grpc_grpc_netty",
++    "@maven//:io_grpc_grpc_protobuf",
++    "@maven//:io_grpc_grpc_stub",
++    "@maven//:io_prometheus_simpleclient",
++    "@maven//:org_apache_commons_commons_compress",
++    "@maven//:org_jetbrains_annotations"
++  ]
++)
+diff --git a/src/main/java/build/buildfarm/worker/persistent/FileAccessUtils.java b/src/main/java/build/buildfarm/worker/persistent/FileAccessUtils.java
+new file mode 100644
+index 00000000..2bf6283c
+--- /dev/null
++++ b/src/main/java/build/buildfarm/worker/persistent/FileAccessUtils.java
+@@ -0,0 +1,170 @@
++package build.buildfarm.worker.persistent;
++
++import java.io.IOException;
++import java.nio.file.Files;
++import java.nio.file.LinkOption;
++import java.nio.file.Path;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.function.Supplier;
++import java.util.logging.Logger;
++
++import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
++import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
++
++public class FileAccessUtils {
++
++  private static final Logger logger = Logger.getLogger(FileAccessUtils.class.getName());
++
++  private static final ConcurrentHashMap<Path, EasyMonitor> chm = new ConcurrentHashMap<>();
++
++  private static class EasyMonitor {
++    public EasyMonitor(){}
++  }
++
++  /**
++   * Copies a file, creating necessary directories, replacing existing files.
++   * The resulting file is set to be writeable, and we throw if we cannot set that.
++   * Thread-safe against writes to the same path.
++   *
++   * @param from
++   * @param to
++   * @throws IOException
++   */
++  public static void copyFile(Path from, Path to) throws IOException {
++    Path absTo = to.toAbsolutePath();
++    logger.finer("copyFile: " + from + " to " + absTo);
++    if (!Files.exists(from)) {
++      throw new IOException("copyFile: source file doesn't exist: " + from);
++    }
++    IOException ioException = writeFileSafe(
++        to,
++        () -> {
++          try {
++            Files.copy(from, absTo, REPLACE_EXISTING, COPY_ATTRIBUTES);
++            boolean writeable = absTo.toFile().setWritable(true);
++            if (!writeable) {
++              return new IOException("copyFile() could not set writeable: " + absTo);
++            }
++            return null;
++          } catch (IOException e) {
++            return e;
++          }
++        }
++    );
++    if (ioException != null) {
++      throw ioException;
++    }
++  }
++
++  /**
++   * Moves a file, creating necessary directories, replacing existing files.
++   * The resulting file is set to be writeable, and we throw if we cannot set that.
++   * Thread-safe against writes to the same path.
++   *
++   * @param from
++   * @param to
++   * @throws IOException
++   */
++  public static void moveFile(Path from, Path to) throws IOException {
++    Path absTo = to.toAbsolutePath();
++    logger.finer("moveFile: " + from + " to " + absTo);
++    if (!Files.exists(from)) {
++      throw new IOException("moveFile: source file doesn't exist: " + from);
++    }
++    IOException ioException = writeFileSafe(
++        absTo,
++        () -> {
++          try {
++            Files.move(from, absTo, REPLACE_EXISTING);
++            boolean writeable = absTo.toFile().setWritable(true);
++            if (!writeable) {
++              return new IOException("moveFile() could not set writeable: " + absTo);
++            }
++            return null;
++          } catch (IOException e) {
++            return e;
++          }
++        }
++    );
++    if (ioException != null) {
++      throw ioException;
++    }
++  }
++
++  /**
++   * Creates a symlink, creating necessary directories.
++   * Deletes pre-existing files/links which have the same path as the specified link,
++   *   effectively overwriting any existing files/links.
++   *
++   * @param from
++   * @param to
++   * @throws IOException
++   */
++  public static void linkFile(Path from, Path to) throws IOException {
++    Path absTo = to.toAbsolutePath();
++    logger.finer("linkFile: " + from + " to " + absTo);
++    if (!Files.exists(from)) {
++      throw new IOException("linkFile: source file doesn't exist: " + from);
++    }
++    IOException ioException = writeFileSafe(
++        absTo,
++        () -> {
++          try {
++            Files.deleteIfExists(absTo);
++            Files.createSymbolicLink(absTo, from);
++            return null;
++          } catch (IOException e) {
++            return e;
++          }
++        }
++    );
++    if (ioException != null) {
++      throw ioException;
++    }
++  }
++
++  /**
++   * Deletes a file; Thread-safe against writes to the same path.
++   *
++   * @param toDelete
++   * @throws IOException
++   */
++  public static void deleteFileIfExists(Path toDelete) throws IOException {
++    Path absTo = toDelete.toAbsolutePath();
++    EasyMonitor toLock = fileLock(absTo);
++    synchronized(toLock) {
++      try {
++        Files.deleteIfExists(absTo);
++      } finally {
++        chm.remove(absTo);
++      }
++    }
++  }
++
++  /**
++   * Thread-safe (not multi-process-safe) wrapper for locking paths before a write operation.
++   *
++   * This method will create necessary parent directories.
++   *
++   * It is up to the write operation to specify whether or not to overwrite existing files.
++   */
++  private static IOException writeFileSafe(Path absTo, Supplier<IOException> writeOp) {
++    EasyMonitor toLock = fileLock(absTo);
++    synchronized(toLock) {
++      try {
++        // If 'absTo' is a symlink, checks if its target file exists
++        Files.createDirectories(absTo.getParent());
++        return writeOp.get();
++      } catch (IOException e) {
++        return e;
++      } finally {
++        // Clean up to prevent too many locks.
++        chm.remove(absTo);
++      }
++    }
++  }
++
++  private static EasyMonitor fileLock(Path writeTo) {
++    return chm.computeIfAbsent(writeTo, k -> new EasyMonitor());
++  }
++}
+diff --git a/src/main/java/build/buildfarm/worker/persistent/Keymaker.java b/src/main/java/build/buildfarm/worker/persistent/Keymaker.java
+new file mode 100644
+index 00000000..c0861386
+--- /dev/null
++++ b/src/main/java/build/buildfarm/worker/persistent/Keymaker.java
+@@ -0,0 +1,100 @@
++package build.buildfarm.worker.persistent;
++
++import java.nio.charset.StandardCharsets;
++import java.nio.file.Path;
++import java.util.Objects;
++import java.util.SortedMap;
++
++import com.google.common.collect.ImmutableList;
++import com.google.common.collect.ImmutableMap;
++import com.google.common.collect.ImmutableSortedMap;
++import com.google.common.hash.HashCode;
++import com.google.common.hash.Hasher;
++import com.google.common.hash.Hashing;
++
++import persistent.bazel.client.PersistentWorker;
++import persistent.bazel.client.WorkerKey;
++
++public class Keymaker {
++
++  // Constructs a key with its worker tool input files being relative paths
++  public static WorkerKey make(
++      Path opRoot,
++      ImmutableList<String> workerInitCmd,
++      ImmutableList<String> workerInitArgs,
++      ImmutableMap<String, String> workerEnv,
++      String executionName,
++      WorkerInputs workerFiles
++  ) {
++    boolean sandboxed = true;
++    boolean cancellable = false;
++
++    Path workRoot = calculateWorkRoot(workerInitCmd, workerInitArgs, workerEnv, executionName,
++        sandboxed, cancellable);
++    Path toolsRoot = workRoot.resolve(PersistentWorker.TOOL_INPUT_SUBDIR);
++
++    SortedMap<Path, HashCode> hashedTools = workerFilesWithHashes(workerFiles);
++    HashCode combinedToolsHash = workerFilesCombinedHash(toolsRoot, hashedTools);
++
++    return new WorkerKey(
++        workerInitCmd,
++        workerInitArgs,
++        workerEnv,
++        workRoot,
++        executionName,
++        combinedToolsHash,
++        hashedTools,
++        sandboxed,
++        cancellable,
++        opRoot
++    );
++  }
++
++  // Hash of a subset of the WorkerKey
++  static private Path calculateWorkRoot(
++      ImmutableList<String> workerInitCmd,
++      ImmutableList<String> workerInitArgs,
++      ImmutableMap<String, String> workerEnv,
++      String executionName,
++      boolean sandboxed,
++      boolean cancellable
++  ) {
++    int workRootId = Objects.hash(
++        workerInitCmd,
++        workerInitArgs,
++        workerEnv,
++        sandboxed,
++        cancellable
++    );
++    String workRootDirName = "work-root_" + executionName + "_" + workRootId;
++    return PersistentExecutor.workRootsDir.resolve(workRootDirName);
++  }
++
++  static private ImmutableSortedMap<Path, HashCode> workerFilesWithHashes(
++      WorkerInputs workerFiles
++  ) {
++
++    ImmutableSortedMap.Builder<Path, HashCode> workerFileHashBuilder = ImmutableSortedMap.naturalOrder();
++
++    for (Path opPath : workerFiles.opToolInputs) {
++      Path relPath = workerFiles.opRoot.relativize(opPath);
++
++      HashCode toolInputHash = HashCode.fromBytes(workerFiles.digestFor(opPath).toByteArray());
++      workerFileHashBuilder.put(relPath, toolInputHash);
++    }
++
++    return workerFileHashBuilder.build();
++  }
++
++  // Even though we hash the toolsRoot-resolved path, it doesn't exist yet.
++  static private HashCode workerFilesCombinedHash(
++      Path toolsRoot, SortedMap<Path, HashCode> hashedTools
++  ) {
++    Hasher hasher = Hashing.sha256().newHasher();
++    hashedTools.forEach((relPath, toolHash) -> {
++      hasher.putString(toolsRoot.resolve(relPath).toString(), StandardCharsets.UTF_8);
++      hasher.putBytes(toolHash.asBytes());
++    });
++    return hasher.hash();
++  }
++}
+diff --git a/src/main/java/build/buildfarm/worker/persistent/PersistentExecutor.java b/src/main/java/build/buildfarm/worker/persistent/PersistentExecutor.java
+new file mode 100644
+index 00000000..2bd3ad94
+--- /dev/null
++++ b/src/main/java/build/buildfarm/worker/persistent/PersistentExecutor.java
+@@ -0,0 +1,247 @@
++package build.buildfarm.worker.persistent;
++
++import java.io.IOException;
++import java.nio.charset.StandardCharsets;
++import java.nio.file.Path;
++import java.nio.file.Paths;
++import java.util.Map;
++import java.util.logging.Level;
++import java.util.logging.Logger;
++import java.util.stream.Collectors;
++
++import com.google.common.collect.ImmutableList;
++import com.google.common.collect.ImmutableMap;
++import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
++import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
++import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
++import com.google.protobuf.ByteString;
++import com.google.protobuf.Duration;
++import com.google.rpc.Code;
++
++import build.bazel.remote.execution.v2.ActionResult;
++import build.buildfarm.worker.resources.ResourceLimits;
++import persistent.bazel.client.WorkerKey;
++
++/**
++ * Responsible for returning information just like Executor/DockerExecutor.
++ */
++public class PersistentExecutor {
++
++  private static final Logger logger = Logger.getLogger(PersistentExecutor.class.getName());
++
++  private static final int defaultMaxWorkersPerKey = 6;
++
++  private static final ProtoCoordinator coordinator = ProtoCoordinator.ofCommonsPool(getMaxWorkersPerKey());
++
++  static final Path workRootsDir = Paths.get("/tmp/worker/persistent/");
++
++  static final String PERSISTENT_WORKER_FLAG = "--persistent_worker";
++
++  static final String JAVABUILDER_JAR = "external/remote_java_tools/java_tools/JavaBuilder_deploy.jar";
++
++  private static final String SCALAC_EXEC_NAME = "Scalac";
++  private static final String JAVAC_EXEC_NAME = "JavaBuilder";
++
++  private static int getMaxWorkersPerKey() {
++    try {
++      return Integer.parseInt(System.getenv("BUILDFARM_MAX_WORKERS_PER_KEY"));
++    } catch(Exception ignored) {
++      logger.info(
++          "Could not get env var BUILDFARM_MAX_WORKERS_PER_KEY; defaulting to " + defaultMaxWorkersPerKey
++      );
++    }
++    return defaultMaxWorkersPerKey;
++  }
++
++  /**
++   * 1) Parse tool inputs and request inputs
++   * 2) Makes the WorkerKey
++   * 3) Loads the tool inputs if needed into the WorkerKey tool inputs dir
++   * 4) Runs the work request on its Coordinator, passing it the required context
++   * 5) Passes output to the resultBuilder
++   */
++  public static Code runOnPersistentWorker(
++      String persistentWorkerInitCmd,
++      WorkFilesContext context,
++      String operationName,
++      ImmutableList<String> argsList,
++      ImmutableMap<String, String> envVars,
++      ResourceLimits limits,
++      Duration timeout,
++      ActionResult.Builder resultBuilder
++  ) throws IOException {
++
++    //// Start, hardcoding persistent worker actions
++
++    logger.log(Level.FINE, "executeCommandOnPersistentWorker[" + operationName + "]");
++
++    ImmutableList<String> initCmd = parseInitCmd(persistentWorkerInitCmd, argsList);
++
++    String executionName = getExecutionName(argsList);
++    if (executionName.isEmpty()) {
++      logger.log(Level.SEVERE, "Invalid Argument?!: " + argsList);
++      return Code.INVALID_ARGUMENT;
++    }
++
++    // int jarOrBinIdx;
++    ImmutableMap<String, String> env;
++    if (executionName.equals(JAVAC_EXEC_NAME)) {
++      env = ImmutableMap.of();
++    } else {
++      // Scalac
++      env = envVars;
++    }
++
++    // //// Parse args into initial tool startup and action request
++
++    // // flags aren't part of the request
++    // // this should definitely fail on a flag with a param...
++    // // Maybe hardcode to first argsfile? if only I could build bazel.
++    // int requestArgsIdx = jarOrBinIdx + 1;
++    // for (String s : argsList) {
++    //   if (s.startsWith("-")) {
++    //     requestArgsIdx = Math.max(requestArgsIdx, argsList.lastIndexOf(s) + 1);
++    //   }
++    // }
++    // List<String> flags = argsList.subList(jarOrBinIdx + 1, requestArgsIdx);
++
++    int requestArgsIdx = initCmd.size();
++    ImmutableList<String> workerExecCmd = initCmd; // argsList.subList(0, jarOrBinIdx + 1);
++    ImmutableList<String> workerInitArgs = ImmutableList.<String>builder()
++        //.addAll(flags)
++        .add(PERSISTENT_WORKER_FLAG)
++        .build();
++    ImmutableList<String> requestArgs = argsList.subList(requestArgsIdx, argsList.size());
++
++    //// Make Key
++
++    WorkerInputs workerFiles = WorkerInputs.from(context, requestArgs);
++
++    Path binary = Paths.get(workerExecCmd.get(0));
++    if (!workerFiles.containsTool(binary) && !binary.isAbsolute()) {
++      throw new IllegalArgumentException("Binary isn't a tool?! " + binary);
++    }
++
++    WorkerKey key = Keymaker.make(
++        context.opRoot,
++        workerExecCmd,
++        workerInitArgs,
++        env,
++        executionName,
++        workerFiles
++    );
++
++    coordinator.copyToolInputsIntoWorkerToolRoot(key, workerFiles);
++
++
++    //// Make request
++
++    // Inputs should be relative paths (if they are from operation root)
++    ImmutableList.Builder<Input> reqInputsBuilder = ImmutableList.builder();
++
++    for (Map.Entry<Path, Input> opInput : workerFiles.allInputs.entrySet()) {
++      Input relInput = opInput.getValue();
++      Path opPath = opInput.getKey();
++      if (opPath.startsWith(workerFiles.opRoot)) {
++        relInput = relInput
++            .toBuilder()
++            .setPath(workerFiles.opRoot.relativize(opPath).toString())
++            .build();
++      }
++      reqInputsBuilder.add(relInput);
++    }
++    ImmutableList<Input> reqInputs = reqInputsBuilder.build();
++
++    WorkRequest request = WorkRequest.newBuilder()
++        .addAllArguments(requestArgs)
++        .addAllInputs(reqInputs)
++        .setRequestId(0)
++        .build();
++
++    RequestCtx requestCtx = new RequestCtx(request, context, workerFiles, timeout);
++
++    //// Run request
++    //// Required file operations (in/out) are the responsibility of the coordinator
++
++    logger.log(Level.FINE, "Request with key: " + key);
++    WorkResponse response;
++    String stdErr = "";
++    try {
++      ResponseCtx fullResponse = coordinator.runRequest(key, requestCtx);
++
++      response = fullResponse.response;
++      stdErr = fullResponse.errorString;
++    } catch (Exception e) {
++
++      String debug = "\n\tRequest.initCmd: " + workerExecCmd +
++                     "\n\tRequest.initArgs: " + workerInitArgs +
++                     "\n\tRequest.requestArgs: " + request.getArgumentsList();
++      String msg = "Exception while running request: " + e + debug + "\n\n";
++
++      logger.log(Level.SEVERE, msg);
++      e.printStackTrace();
++      response = WorkResponse.newBuilder()
++          .setOutput(msg)
++          .setExitCode(-1) // incomplete
++          .build();
++    }
++
++    //// Set results
++
++    String responseOut = response.getOutput();
++    logger.log(Level.FINE, "WorkResponse.output: " + responseOut);
++
++    int exitCode = response.getExitCode();
++    resultBuilder
++        .setExitCode(exitCode)
++        .setStdoutRaw(response.getOutputBytes())
++        .setStderrRaw(ByteString.copyFrom(stdErr, StandardCharsets.UTF_8));
++
++    if (exitCode == 0) {
++      return Code.OK;
++    }
++
++    if (executionName.equals("SomeOtherExec")) {
++      System.out.println("SomeOtherExec inputs: " +
++          ImmutableList.copyOf(reqInputs.stream().map(Input::getPath).collect(Collectors.toList()))
++      );
++    }
++    logger.severe(
++        "PersistentExecutor.runOnPersistentWorker Failed with code: " +
++        exitCode + "\n" + responseOut
++    );
++    return Code.FAILED_PRECONDITION;
++  }
++
++  private static ImmutableList<String> parseInitCmd(String cmdStr, ImmutableList<String> argsList) {
++    if (cmdStr.isEmpty() || !cmdStr.endsWith(PERSISTENT_WORKER_FLAG)) {
++      throw new IllegalArgumentException("parseInitCmd?[" + cmdStr + "]" + "\n" + argsList);
++    }
++
++    String cmd = cmdStr.strip().substring(0, (cmdStr.length() - PERSISTENT_WORKER_FLAG.length()) - 1);
++
++    ImmutableList.Builder<String> initCmdBuilder = ImmutableList.builder();
++    for (String s : argsList) {
++      if (cmd.length() == 0) {
++        break;
++      }
++      cmd = cmd.substring(s.length()).strip();
++      initCmdBuilder.add(s);
++    }
++    ImmutableList<String> initCmd = initCmdBuilder.build();
++    if (!initCmd.equals(argsList.subList(0, initCmd.size()))) {
++      throw new IllegalArgumentException("parseInitCmd?![" + initCmd + "]" + "\n" + argsList);
++    }
++    return initCmd;
++  }
++
++  private static String getExecutionName(ImmutableList<String> argsList) {
++    boolean isScalac = argsList.size() > 1 && argsList.get(0).endsWith("scalac/scalac");
++    if (isScalac) {
++      return SCALAC_EXEC_NAME;
++    } else if (argsList.contains(JAVABUILDER_JAR)) {
++      return JAVAC_EXEC_NAME;
++    }
++    return "SomeOtherExec";
++  }
++}
+diff --git a/src/main/java/build/buildfarm/worker/persistent/ProtoCoordinator.java b/src/main/java/build/buildfarm/worker/persistent/ProtoCoordinator.java
+new file mode 100644
+index 00000000..0f60f6e8
+--- /dev/null
++++ b/src/main/java/build/buildfarm/worker/persistent/ProtoCoordinator.java
+@@ -0,0 +1,277 @@
++package build.buildfarm.worker.persistent;
++
++import java.io.IOException;
++import java.nio.file.Files;
++import java.nio.file.Path;
++import java.nio.file.Paths;
++import java.util.UUID;
++import java.util.Timer;
++import java.util.TimerTask;
++import java.util.concurrent.ConcurrentHashMap;
++import java.util.logging.Level;
++import java.util.logging.Logger;
++
++import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
++import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
++import com.google.protobuf.Duration;
++
++import persistent.bazel.client.CommonsWorkerPool;
++import persistent.bazel.client.PersistentWorker;
++import persistent.bazel.client.WorkCoordinator;
++import persistent.bazel.client.WorkerKey;
++
++import static persistent.bazel.client.PersistentWorker.TOOL_INPUT_SUBDIR;
++
++/**
++ * Responsible for:
++ * 1) Initializing a new Worker's file environment correctly
++ * 2) pre-request requirements
++ * 3) post-response requirements, i.e. putting output files in the right place
++ */
++public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, CommonsWorkerPool> {
++
++  private static final Logger logger = Logger.getLogger(ProtoCoordinator.class.getName());
++
++  private static final String WORKER_INIT_LOG_SUFFIX = ".initargs.log";
++
++  private static final ConcurrentHashMap<RequestCtx, PersistentWorker> pendingReqs = new ConcurrentHashMap<>();
++
++  private static final Timer timeoutScheduler = new Timer("persistent-worker-timeout", true);
++
++  private static final ConcurrentHashMap<WorkerKey, EasyMonitor> toolInputSyncs = new ConcurrentHashMap<>();
++
++  private static EasyMonitor keyLock(WorkerKey key) {
++    return toolInputSyncs.computeIfAbsent(key, k -> new EasyMonitor());
++  }
++
++  private static class EasyMonitor {
++    public EasyMonitor(){}
++  }
++
++  public ProtoCoordinator(CommonsWorkerPool workerPool) {
++    super(workerPool);
++  }
++
++  public ProtoCoordinator(PersistentWorker.Supervisor supervisor, int maxWorkersPerKey) {
++    super(new CommonsWorkerPool(supervisor, maxWorkersPerKey));
++  }
++
++  // We copy tool inputs from the shared WorkerKey tools directory into our worker exec root,
++  //    since there are multiple workers per key,
++  //    and presumably there might be writes to tool inputs?
++  // Tool inputs which are absolute-paths (e.g. /usr/bin/...) are not affected
++  public static ProtoCoordinator ofCommonsPool(int maxWorkersPerKey) {
++    PersistentWorker.Supervisor loadToolsOnCreate = new PersistentWorker.Supervisor() {
++      @Override
++      public PersistentWorker create(WorkerKey workerKey) throws Exception {
++        Path keyExecRoot = workerKey.getExecRoot();
++        String workerExecDir = getUniqueSubdir(keyExecRoot);
++        Path workerExecRoot = keyExecRoot.resolve(workerExecDir);
++        copyToolsIntoWorkerExecRoot(workerKey, workerExecRoot);
++
++        Path initArgsLogFile = workerExecRoot.resolve(workerExecDir + WORKER_INIT_LOG_SUFFIX);
++        if (!Files.exists(initArgsLogFile)) {
++          StringBuilder initArgs = new StringBuilder();
++          for (String s : workerKey.getCmd()) {
++            initArgs.append(s);
++            initArgs.append("\n");
++          }
++          for (String s : workerKey.getArgs()) {
++            initArgs.append(s);
++            initArgs.append("\n");
++          }
++
++          Files.write(initArgsLogFile, initArgs.toString().getBytes());
++        }
++
++        return new PersistentWorker(workerKey, workerExecDir);
++      }
++    };
++    return new ProtoCoordinator(loadToolsOnCreate, maxWorkersPerKey);
++  }
++
++  public void copyToolInputsIntoWorkerToolRoot(WorkerKey key, WorkerInputs workerFiles) throws IOException {
++    EasyMonitor lock = keyLock(key);
++    synchronized (lock) {
++      try {
++        //// Move tool inputs as needed
++        Path workToolRoot = key.getExecRoot().resolve(PersistentWorker.TOOL_INPUT_SUBDIR);
++        for (Path opToolPath : workerFiles.opToolInputs) {
++          Path workToolPath = workerFiles.relativizeInput(workToolRoot, opToolPath);
++          if (!Files.exists(workToolPath)) {
++            workerFiles.copyInputFile(opToolPath, workToolPath);
++          }
++        }
++      } finally {
++        toolInputSyncs.remove(key);
++      }
++    }
++  }
++
++  private static String getUniqueSubdir(Path workRoot) {
++    String uuid = UUID.randomUUID().toString();
++    while (Files.exists(workRoot.resolve(uuid))) {
++      uuid = UUID.randomUUID().toString();
++    }
++    return uuid;
++  }
++
++  // moveToolInputsIntoWorkerToolRoot() should have been called before this.
++  private static void copyToolsIntoWorkerExecRoot(
++      WorkerKey key, Path workerExecRoot
++  ) throws IOException {
++    logger.log(Level.FINE, "loadToolsIntoWorkerRoot() into: " + workerExecRoot);
++
++    Path toolInputRoot = key.getExecRoot().resolve(TOOL_INPUT_SUBDIR);
++    for (Path relPath : key.getWorkerFilesWithHashes().keySet()) {
++      Path toolInputPath = toolInputRoot.resolve(relPath);
++      Path execRootPath = workerExecRoot.resolve(relPath);
++
++      FileAccessUtils.copyFile(toolInputPath, execRootPath);
++    }
++  }
++
++  // For now, we assume that each operation corresponds to a unique worker
++  @Override
++  public WorkRequest preWorkInit(
++      WorkerKey key, RequestCtx request, PersistentWorker worker
++  ) throws IOException {
++
++    PersistentWorker pendingWorker = pendingReqs.putIfAbsent(request, worker);
++    if (pendingWorker != null) {
++      if (pendingWorker != worker) {
++        throw new IllegalArgumentException("Already have a persistent worker on the job: " + request.request);
++      } else {
++        throw new IllegalArgumentException("Got the same request for the same worker while it's running?!: " + request.request);
++      }
++    }
++    startTimeoutTimer(request);
++
++    copyNontoolInputs(request.workerInputs, worker.getExecRoot());
++
++    return request.request;
++  }
++
++  // After the worker has finished, we need to copy output files back to the operation directory
++  @Override
++  public ResponseCtx postWorkCleanup(
++      WorkResponse response, PersistentWorker worker, RequestCtx request
++  ) throws IOException {
++
++    pendingReqs.remove(request);
++
++    if (response == null) {
++      throw new RuntimeException("postWorkCleanup: WorkResponse was null!");
++    }
++
++    if (response.getExitCode() == 0) {
++      try {
++        Path workerExecRoot = worker.getExecRoot();
++        moveOutputsToOperationRoot(request.filesContext, workerExecRoot);
++        cleanUpNontoolInputs(request.workerInputs, workerExecRoot);
++      } catch (IOException e) {
++        throw logBadCleanup(request, e);
++      }
++    }
++
++    return new ResponseCtx(response, worker.flushStdErr());
++  }
++
++  private IOException logBadCleanup(RequestCtx request, IOException e) {
++    WorkFilesContext context = request.filesContext;
++
++    StringBuilder sb = new StringBuilder();
++    // Why is paths empty when files are not?
++    sb.append(
++        "Output files failure debug for request with args<" + request.request.getArgumentsList() + ">:\n");
++    sb.append("getOutputPathsList:\n");
++    sb.append(context.outputPaths);
++    sb.append("getOutputFilesList:\n");
++    sb.append(context.outputFiles);
++    sb.append("getOutputDirectoriesList:\n");
++    sb.append(context.outputDirectories);
++    logger.severe(sb.toString());
++
++    e.printStackTrace();
++    return new IOException("Response was OK but failed on exposeOutputFiles", e);
++  }
++
++  // This should replace any existing symlinks
++  private void linkNontoolInputs(WorkerInputs workerInputs, Path workerExecRoot) throws IOException {
++    for (Path opPath : workerInputs.allInputs.keySet()) {
++      if (!workerInputs.allToolInputs.contains(opPath)) {
++        Path execPath = workerInputs.relativizeInput(workerExecRoot, opPath);
++        workerInputs.linkInputFile(opPath, execPath);
++      }
++    }
++  }
++
++  private void copyNontoolInputs(WorkerInputs workerInputs, Path workerExecRoot) throws IOException {
++    for (Path opPath : workerInputs.allInputs.keySet()) {
++      if (!workerInputs.allToolInputs.contains(opPath)) {
++        Path execPath = workerInputs.relativizeInput(workerExecRoot, opPath);
++        workerInputs.copyInputFile(opPath, execPath);
++      }
++    }
++  }
++
++  private void moveOutputsToOperationRoot(WorkFilesContext context, Path workerExecRoot) throws IOException {
++    Path opRoot = context.opRoot;
++
++    // ??? see DockerExecutor::copyOutputsOutOfContainer
++    for (String outputDir : context.outputDirectories) {
++      Path outputDirPath = Paths.get(outputDir);
++      Files.createDirectories(outputDirPath);
++    }
++
++    for (String relOutput : context.outputFiles) {
++      Path relPath = Paths.get(relOutput);
++      Path opOutputPath = opRoot.resolve(relPath);
++      Path execOutputPath = workerExecRoot.resolve(relPath);
++
++      FileAccessUtils.moveFile(execOutputPath, opOutputPath);
++    }
++  }
++
++  private void cleanUpNontoolInputs(WorkerInputs workerInputs, Path workerExecRoot) throws IOException {
++    for (Path opPath : workerInputs.allInputs.keySet()) {
++      if (!workerInputs.allToolInputs.contains(opPath)) {
++        workerInputs.deleteInputFileIfExists(workerExecRoot, opPath);
++      }
++    }
++  }
++
++  private void startTimeoutTimer(RequestCtx request) {
++    Duration timeout = request.timeout;
++    if (timeout != null) {
++      long timeoutNanos = timeout.getSeconds() * 1000000000L + timeout.getNanos();
++      timeoutScheduler.schedule(new RequestTimeoutHandler(request), timeoutNanos);
++    }
++  }
++
++  private class RequestTimeoutHandler extends TimerTask {
++
++    private final RequestCtx request;
++
++    private RequestTimeoutHandler(RequestCtx request) {
++      this.request = request;
++    }
++
++    @Override
++    public void run() {
++      onTimeout(this.request, pendingReqs.get(this.request));
++    }
++  }
++
++  private void onTimeout(RequestCtx request, PersistentWorker worker) {
++    if (worker != null) {
++      logger.severe("Persistent Worker timed out on request: " + request.request);
++      try {
++        this.workerPool.invalidateObject(worker.getKey(), worker);
++      } catch (Exception e) {
++        logger.severe("Tried to invalidate worker for request:\n" + request + "\n\tbut got: " + e + "\n\nCalling worker.destroy() and moving on.");
++        worker.destroy();
++      }
++    }
++  }
++}
+diff --git a/src/main/java/build/buildfarm/worker/persistent/RequestCtx.java b/src/main/java/build/buildfarm/worker/persistent/RequestCtx.java
+new file mode 100644
+index 00000000..00afe771
+--- /dev/null
++++ b/src/main/java/build/buildfarm/worker/persistent/RequestCtx.java
+@@ -0,0 +1,29 @@
++package build.buildfarm.worker.persistent;
++
++import com.google.devtools.build.lib.worker.WorkerProtocol.WorkRequest;
++import com.google.protobuf.Duration;
++
++import persistent.common.CtxAround;
++
++public class RequestCtx implements CtxAround<WorkRequest> {
++
++  public final WorkRequest request;
++
++  public final WorkFilesContext filesContext;
++
++  public final WorkerInputs workerInputs;
++
++  public final Duration timeout;
++
++  public RequestCtx(WorkRequest request, WorkFilesContext ctx, WorkerInputs workFiles, Duration timeout) {
++    this.request = request;
++    this.filesContext = ctx;
++    this.workerInputs = workFiles;
++    this.timeout = timeout;
++  }
++
++  @Override
++  public WorkRequest get() {
++    return request;
++  }
++}
+diff --git a/src/main/java/build/buildfarm/worker/persistent/ResponseCtx.java b/src/main/java/build/buildfarm/worker/persistent/ResponseCtx.java
+new file mode 100644
+index 00000000..1b23cad2
+--- /dev/null
++++ b/src/main/java/build/buildfarm/worker/persistent/ResponseCtx.java
+@@ -0,0 +1,24 @@
++package build.buildfarm.worker.persistent;
++
++import java.nio.file.Path;
++
++import com.google.devtools.build.lib.worker.WorkerProtocol.WorkResponse;
++
++import persistent.common.CtxAround;
++
++public class ResponseCtx implements CtxAround<WorkResponse> {
++
++  public final WorkResponse response;
++
++  public final String errorString;
++
++  public ResponseCtx(WorkResponse response, String errorString) {
++    this.response = response;
++    this.errorString = errorString;
++  }
++
++  @Override
++  public WorkResponse get() {
++    return response;
++  }
++}
+diff --git a/src/main/java/build/buildfarm/worker/persistent/WorkFilesContext.java b/src/main/java/build/buildfarm/worker/persistent/WorkFilesContext.java
+new file mode 100644
+index 00000000..7358bc1b
+--- /dev/null
++++ b/src/main/java/build/buildfarm/worker/persistent/WorkFilesContext.java
+@@ -0,0 +1,67 @@
++package build.buildfarm.worker.persistent;
++
++import java.nio.file.Path;
++
++import com.google.common.collect.ImmutableList;
++import com.google.common.collect.ImmutableMap;
++import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
++
++import build.buildfarm.v1test.Tree;
++import build.buildfarm.worker.util.TreeWalker;
++
++/**
++ * POJO/data class grouping all the input/output file requirements for persistent workers
++ */
++public class WorkFilesContext {
++
++  public final Path opRoot;
++
++  public final Tree execTree;
++
++  public final ImmutableList<String> outputPaths;
++
++  public final ImmutableList<String> outputFiles;
++
++  public final ImmutableList<String> outputDirectories;
++
++  private final TreeWalker treeWalker;
++
++  private ImmutableMap<Path, Input> pathInputs = null;
++
++  private ImmutableMap<Path, Input> toolInputs = null;
++
++  public WorkFilesContext(
++      Path opRoot,
++      Tree execTree,
++      ImmutableList<String> outputPaths,
++      ImmutableList<String> outputFiles,
++      ImmutableList<String> outputDirectories
++  ) {
++    this.opRoot = opRoot.toAbsolutePath();
++    this.execTree = execTree;
++    this.outputPaths = outputPaths;
++    this.outputFiles = outputFiles;
++    this.outputDirectories = outputDirectories;
++
++    this.treeWalker = new TreeWalker(execTree);
++  }
++
++  // Paths are absolute paths from the opRoot; same as the Input.getPath();
++  public ImmutableMap<Path, Input> getPathInputs() {
++    synchronized (this) {
++      if (pathInputs == null) {
++        pathInputs = treeWalker.getAllInputs(opRoot);
++      }
++    }
++    return pathInputs;
++  }
++
++  public ImmutableMap<Path, Input> getToolInputs() {
++    synchronized (this) {
++      if (toolInputs == null) {
++        toolInputs = treeWalker.getToolInputs(opRoot);
++      }
++    }
++    return toolInputs;
++  }
++}
+diff --git a/src/main/java/build/buildfarm/worker/persistent/WorkerInputs.java b/src/main/java/build/buildfarm/worker/persistent/WorkerInputs.java
+new file mode 100644
+index 00000000..d74c2de2
+--- /dev/null
++++ b/src/main/java/build/buildfarm/worker/persistent/WorkerInputs.java
+@@ -0,0 +1,140 @@
++package build.buildfarm.worker.persistent;
++
++import java.io.IOException;
++import java.nio.file.Path;
++import java.nio.file.Paths;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.logging.Logger;
++
++import com.google.common.collect.ImmutableMap;
++import com.google.common.collect.ImmutableSet;
++import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
++import com.google.protobuf.ByteString;
++
++import persistent.common.util.Args;
++
++public class WorkerInputs {
++
++  private static final Logger logger = Logger.getLogger(WorkerInputs.class.getName());
++
++  public final Path opRoot;
++  // Some tool inputs are not under opRoot
++  public final ImmutableSet<Path> absToolInputs;
++  // The Paths in these collections should all be absolute and under opRoot
++  public final ImmutableSet<Path> opToolInputs;
++  public final ImmutableMap<Path, Input> allInputs;
++
++  public final ImmutableSet<Path> allToolInputs;
++
++  public WorkerInputs(
++      Path opRoot,
++      ImmutableSet<Path> absToolInputs,
++      ImmutableSet<Path> opToolInputs,
++      ImmutableMap<Path, Input> allInputs
++  ) {
++    this.opRoot = opRoot;
++    this.absToolInputs = absToolInputs;
++    this.opToolInputs = opToolInputs;
++    this.allInputs = allInputs;
++
++    this.allToolInputs = ImmutableSet.<Path>builder()
++        .addAll(absToolInputs)
++        .addAll(opToolInputs)
++        .build();
++
++    // Currently not a concern but could be in the future
++    for (Path tool : opToolInputs) {
++      if (!allInputs.containsKey(tool)) {
++        String msg = "Tool not found in inputs: " + tool;
++        logger.severe(msg);
++        throw new IllegalArgumentException(msg);
++      }
++    }
++  }
++
++  public boolean containsTool(Path tool) {
++    return allToolInputs.contains(opRoot.resolve(tool));
++  }
++
++  public Path relativizeInput(Path newRoot, Path input) {
++    return newRoot.resolve(opRoot.relativize(input));
++  }
++
++  public void copyInputFile(Path from, Path to) throws IOException {
++    checkFileIsInput("copyInputFile()", from);
++    FileAccessUtils.copyFile(from, to);
++  }
++
++  public void moveInputFile(Path from, Path to) throws IOException {
++    checkFileIsInput("moveInputFile()", from);
++    FileAccessUtils.moveFile(from, to);
++  }
++
++  public void linkInputFile(Path from, Path to) throws IOException {
++    checkFileIsInput("linkInputFile()", from);
++    FileAccessUtils.linkFile(from, to);
++  }
++
++  public void deleteInputFileIfExists(Path workerExecRoot, Path opPathInput) throws IOException {
++    checkFileIsInput("deleteInputFile()", opPathInput);
++    Path execPathInput = relativizeInput(workerExecRoot, opPathInput);
++    FileAccessUtils.deleteFileIfExists(execPathInput);
++  }
++
++  private void checkFileIsInput(String operation, Path file) {
++    if (!allInputs.containsKey(file)) {
++      throw new IllegalArgumentException(
++          operation + " called on non-input file: " + file);
++    }
++  }
++
++  public ByteString digestFor(Path inputPath) {
++    Input input = allInputs.get(inputPath);
++    if (input == null) {
++      throw new IllegalArgumentException("digestFor() called on non-input file: " + inputPath);
++    }
++    return input.getDigest();
++  }
++
++  public static WorkerInputs from(WorkFilesContext workFilesContext, List<String> reqArgs) {
++    
++    ImmutableMap<Path, Input> pathInputs = workFilesContext.getPathInputs();
++
++    ImmutableSet<Path> toolsAbsPaths = workFilesContext.getToolInputs().keySet();
++
++    ImmutableSet<Path> toolInputs = ImmutableSet.copyOf(
++        toolsAbsPaths
++        .stream()
++        .filter(p -> p.startsWith(workFilesContext.opRoot))
++        .iterator()
++    );
++    ImmutableSet<Path> absToolInputs = ImmutableSet.copyOf(
++        toolsAbsPaths
++            .stream()
++            .filter(p -> !toolInputs.contains(p))
++            .iterator()
++    );
++
++    String inputsDebugMsg = "ParsedWorkFiles:" +
++        "\nallInputs: " + pathInputs.keySet() +
++        "\ntoolInputs: " + toolInputs +
++        "\nabsToolInputs: " + absToolInputs;
++
++    logger.fine(inputsDebugMsg);
++
++    return new WorkerInputs(workFilesContext.opRoot, absToolInputs, toolInputs, pathInputs);
++  }
++
++  private static List<Path> argsFiles(Path opRoot, List<String> reqArgs) {
++    List<Path> files = new ArrayList<>();
++    for (String a : reqArgs) {
++      if (Args.isArgsFile(a)) {
++        try {
++          files.add(opRoot.resolve(Paths.get(a.substring(1))));
++        } catch (Exception ignored) {}
++      }
++    }
++    return files;
++  }
++}
+diff --git a/src/main/java/build/buildfarm/worker/resources/ExecutionPropertiesParser.java b/src/main/java/build/buildfarm/worker/resources/ExecutionPropertiesParser.java
+index 289df55b..4d0e458a 100644
+--- a/src/main/java/build/buildfarm/worker/resources/ExecutionPropertiesParser.java
++++ b/src/main/java/build/buildfarm/worker/resources/ExecutionPropertiesParser.java
+@@ -18,10 +18,20 @@ import build.bazel.remote.execution.v2.Command;
+ import build.bazel.remote.execution.v2.Platform.Property;
+ import build.buildfarm.common.ExecutionProperties;
+ import build.buildfarm.common.MapUtils;
++
++import java.io.IOException;
++import java.nio.file.Path;
++import java.nio.file.Paths;
++import java.nio.file.Files;
++import java.nio.file.StandardOpenOption;
+ import java.util.ArrayList;
+ import java.util.HashMap;
+ import java.util.Map;
+ import java.util.function.BiConsumer;
++import java.util.logging.FileHandler;
++import java.util.logging.Level;
++import java.util.logging.Logger;
++
+ import org.json.simple.parser.JSONParser;
+ import org.json.simple.parser.ParseException;
+ 
+@@ -32,6 +42,7 @@ import org.json.simple.parser.ParseException;
+  *     Buildfarm may further modify these choices based on its own configuration and constraints.
+  */
+ public class ExecutionPropertiesParser {
++
+   /**
+    * @brief Decide resource limitations for the given command.
+    * @details Platform properties from specified exec_properties are taken into account when
+@@ -57,6 +68,8 @@ public class ExecutionPropertiesParser {
+     parser.put(ExecutionProperties.SKIP_SLEEP, ExecutionPropertiesParser::storeSkipSleep);
+     parser.put(ExecutionProperties.TIME_SHIFT, ExecutionPropertiesParser::storeTimeShift);
+     parser.put(ExecutionProperties.CONTAINER_IMAGE, ExecutionPropertiesParser::storeContainerImage);
++    parser.put(ExecutionProperties.PERSISTENT_WORKER_KEY, ExecutionPropertiesParser::storePersistentWorkerKey);
++    parser.put(ExecutionProperties.PERSISTENT_WORKER_COMMAND, ExecutionPropertiesParser::storePersistentWorkerCommand);
+     parser.put(
+         ExecutionProperties.DEBUG_BEFORE_EXECUTION,
+         ExecutionPropertiesParser::storeBeforeExecutionDebug);
+@@ -72,6 +85,7 @@ public class ExecutionPropertiesParser {
+         .getPlatform()
+         .getPropertiesList()
+         .forEach((property) -> evaluateProperty(parser, limits, property));
++
+     return limits;
+   }
+ 
+@@ -271,6 +285,34 @@ public class ExecutionPropertiesParser {
+         limits.containerSettings.description, "container image", property.getValue(), property);
+   }
+ 
++  /**
++   * @brief Stores persistentWorkerKey
++   * @details Parses and stores a String.
++   * @param limits Current limits to apply changes to.
++   * @param property The property to store.
++   */
++  private static void storePersistentWorkerKey(ResourceLimits limits, Property property) {
++    limits.persistentWorkerKey = property.getValue();
++    ArrayList<String> xs = new ArrayList<>();
++    xs.add("Hash of tool inputs for remote persistent workers");
++    describeChange(
++      xs, "persistentWorkerKey(hash of tool inputs)", property.getValue(), property);
++  }
++
++  /**
++   * @brief Stores persistentWorkerCommand
++   * @details Parses and stores a String.
++   * @param limits Current limits to apply changes to.
++   * @param property The property to store.
++   */
++  private static void storePersistentWorkerCommand(ResourceLimits limits, Property property) {
++    limits.persistentWorkerCommand = property.getValue();
++    ArrayList<String> xs = new ArrayList<>();
++    xs.add("persistentWorkerCommand");
++    describeChange(
++      xs, "persistentWorkerCommand", property.getValue(), property);
++  }
++
+   /**
+    * @brief Store the property for debugging before an execution.
+    * @details Parses and stores a boolean.
+diff --git a/src/main/java/build/buildfarm/worker/resources/ResourceLimits.java b/src/main/java/build/buildfarm/worker/resources/ResourceLimits.java
+index 4e560162..05d63b1b 100644
+--- a/src/main/java/build/buildfarm/worker/resources/ResourceLimits.java
++++ b/src/main/java/build/buildfarm/worker/resources/ResourceLimits.java
+@@ -142,6 +142,20 @@ public class ResourceLimits {
+    */
+   public String debugTarget = "";
+ 
++  /**
++   * @field persistentWorkerKey
++   * @brief Hash of tool inputs for remote persistent workers
++   * @details See https://github.com/bazelbuild/bazel/issues/10091
++   */
++  public String persistentWorkerKey = "";
++
++  /**
++   * @field persistentWorkerCommand
++   * @brief Command string to start the persistent worker
++   * @details See https://github.com/bazelbuild/bazel/issues/10091
++   */
++  public String persistentWorkerCommand = "";
++
+   /**
+    * @field unusedProperties
+    * @brief Exec_properties that were not used when deciding resource limits.
+diff --git a/src/main/java/build/buildfarm/worker/util/BUILD b/src/main/java/build/buildfarm/worker/util/BUILD
+new file mode 100644
+index 00000000..44206c5f
+--- /dev/null
++++ b/src/main/java/build/buildfarm/worker/util/BUILD
+@@ -0,0 +1,24 @@
++java_library(
++  name = "util",
++  srcs = glob(["*.java"]),
++  visibility = ["//visibility:public"],
++  deps = [
++    "//src/main/java/build/buildfarm/common",
++    "//src/main/java/build/buildfarm/instance",
++    "//src/main/java/build/buildfarm/instance/stub",
++    "//src/main/java/build/buildfarm/worker/resources",
++    "//src/main/protobuf:build_buildfarm_v1test_buildfarm_java_proto",
++    "//third_party/bazel/src/main/protobuf:worker_protocol_java_proto",
++    "@maven//:com_google_code_gson_gson",
++    "@maven//:com_google_guava_guava",
++    "@maven//:com_google_protobuf_protobuf_java",
++    "@maven//:com_google_protobuf_protobuf_java_util",
++    "@maven//:commons_io_commons_io",
++    "@maven//:io_grpc_grpc_api",
++    "@maven//:io_grpc_grpc_context",
++    "@maven//:io_grpc_grpc_core",
++    "@maven//:io_grpc_grpc_netty",
++    "@maven//:io_grpc_grpc_protobuf",
++    "@maven//:io_grpc_grpc_stub",
++  ],
++)
+diff --git a/src/main/java/build/buildfarm/worker/util/TreeWalker.java b/src/main/java/build/buildfarm/worker/util/TreeWalker.java
+new file mode 100644
+index 00000000..72bac377
+--- /dev/null
++++ b/src/main/java/build/buildfarm/worker/util/TreeWalker.java
+@@ -0,0 +1,113 @@
++package build.buildfarm.worker.util;
++
++import java.io.IOException;
++import java.nio.file.Path;
++import java.nio.file.Paths;
++import java.nio.file.Files;
++import java.nio.file.StandardOpenOption;
++import java.util.Map;
++import java.util.logging.Logger;
++import java.util.Optional;
++
++import com.google.common.collect.ImmutableMap;
++import com.google.devtools.build.lib.worker.WorkerProtocol.Input;
++
++import build.bazel.remote.execution.v2.Digest;
++import build.bazel.remote.execution.v2.Directory;
++import build.bazel.remote.execution.v2.FileNode;
++import build.bazel.remote.execution.v2.NodeProperties;
++import build.bazel.remote.execution.v2.NodeProperty;
++import build.buildfarm.common.ProxyDirectoriesIndex;
++import build.buildfarm.v1test.Tree;
++
++public class TreeWalker {
++
++  private static final Logger logger = Logger.getLogger("TreeWalker");
++
++  final Tree tree;
++  final Map<Digest, Directory> proxyDirs;
++  
++  ImmutableMap<Path, FileNode> files = null;
++  ImmutableMap<Path, Input> absPathInputs = null;
++  ImmutableMap<Path, Input> toolInputs = null;
++
++  public TreeWalker(Tree tree) {
++    this.tree = tree;
++    this.proxyDirs = new ProxyDirectoriesIndex(tree.getDirectoriesMap());
++  }
++
++  public ImmutableMap<Path, Input> getAllInputs(Path opRoot) {
++    if (absPathInputs == null) {
++      ImmutableMap<Path, FileNode> relFiles = getAllFiles();
++
++      ImmutableMap.Builder<Path, Input> inputs = ImmutableMap.builder();
++      for (Map.Entry<Path, FileNode> pf : relFiles.entrySet()) {
++        Path absPath = opRoot.resolve(pf.getKey());
++        inputs.put(absPath, inputFromFile(absPath, pf.getValue()));
++      }
++      absPathInputs = inputs.build();
++    }
++    return absPathInputs;
++  }
++
++  public ImmutableMap<Path, Input> getToolInputs(Path opRoot) {
++    if (toolInputs == null) {
++      ImmutableMap<Path, FileNode> relFiles = getAllFiles();
++      ImmutableMap.Builder<Path, Input> inputs = ImmutableMap.builder();
++
++      for (Map.Entry<Path, FileNode> pf : relFiles.entrySet()) {
++        FileNode fn = pf.getValue();
++        if (isToolInput(fn)) {
++          Path absPath = opRoot.resolve(pf.getKey());
++          inputs.put(absPath, inputFromFile(absPath, fn));
++        }
++      }
++      toolInputs = inputs.build();
++    }
++    return toolInputs;
++  }
++
++  private ImmutableMap<Path, FileNode> getAllFiles() {
++    if (files == null) {
++      ImmutableMap.Builder<Path, FileNode> accumulator = ImmutableMap.builder();
++      Directory rootDir = proxyDirs.get(tree.getRootDigest());
++      files = getFilesFromDir(Paths.get("."), rootDir, accumulator).build();
++    }
++    return files;
++  }
++
++  private Input inputFromFile(Path absPath, FileNode fileNode) {
++    return Input.newBuilder()
++      .setPath(absPath.toString())
++      .setDigest(fileNode.getDigest().getHashBytes())
++      .build();
++  }
++
++  private ImmutableMap.Builder<Path, FileNode> getFilesFromDir(
++      Path dirPath, Directory dir, ImmutableMap.Builder<Path, FileNode> acc
++  ) {
++    dir.getFilesList().forEach(fileNode -> {
++      Path path = dirPath.resolve(fileNode.getName()).normalize();
++      acc.put(path, fileNode);
++    });
++
++    // Recurse into subdirectories
++    dir.getDirectoriesList().forEach(dirNode ->
++        getFilesFromDir(
++            dirPath.resolve(dirNode.getName()),
++            this.proxyDirs.get(dirNode.getDigest()),
++            acc
++        )
++    );
++    return acc;
++  }
++
++  private static boolean isToolInput(FileNode fileNode) {
++    for (NodeProperty prop : fileNode.getNodeProperties().getPropertiesList()) {
++      if (prop.getName().equals("bazel_tool_input")) {
++        return true;
++      }
++    }
++    return false;
++  }
++}
