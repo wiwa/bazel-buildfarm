@@ -14,13 +14,31 @@
 
 package build.buildfarm.worker;
 
-import static com.google.common.collect.Maps.uniqueIndex;
-import static com.google.protobuf.util.Durations.add;
-import static com.google.protobuf.util.Durations.compare;
-import static com.google.protobuf.util.Durations.fromSeconds;
-import static java.lang.String.format;
-import static java.util.concurrent.TimeUnit.DAYS;
-import static java.util.concurrent.TimeUnit.MICROSECONDS;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import com.github.dockerjava.api.DockerClient;
+import com.github.dockerjava.core.DockerClientBuilder;
+import com.google.common.base.Stopwatch;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.devtools.build.lib.shell.Protos.ExecutionStatistics;
+import com.google.longrunning.Operation;
+import com.google.protobuf.Any;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.Duration;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.util.Durations;
+import com.google.protobuf.util.Timestamps;
+import com.google.rpc.Code;
 
 import build.bazel.remote.execution.v2.Action;
 import build.bazel.remote.execution.v2.ActionResult;
@@ -36,35 +54,28 @@ import build.buildfarm.common.Write.NullWrite;
 import build.buildfarm.common.config.ExecutionPolicy;
 import build.buildfarm.common.config.ExecutionWrapper;
 import build.buildfarm.v1test.ExecutingOperationMetadata;
+import build.buildfarm.v1test.Tree;
 import build.buildfarm.worker.WorkerContext.IOResource;
+import build.buildfarm.worker.persistent.PersistentExecutor;
+import build.buildfarm.worker.persistent.WorkFilesContext;
 import build.buildfarm.worker.resources.ResourceLimits;
-import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.core.DockerClientBuilder;
-import com.google.common.base.Stopwatch;
-import com.google.common.collect.ImmutableList;
-import com.google.devtools.build.lib.shell.Protos.ExecutionStatistics;
-import com.google.longrunning.Operation;
-import com.google.protobuf.Any;
-import com.google.protobuf.ByteString;
-import com.google.protobuf.Duration;
-import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.util.Durations;
-import com.google.protobuf.util.Timestamps;
-import com.google.rpc.Code;
 import io.grpc.Deadline;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
 import lombok.extern.java.Log;
+
+import static java.lang.String.format;
+import static java.util.concurrent.TimeUnit.DAYS;
+import static java.util.concurrent.TimeUnit.MICROSECONDS;
+
+import static com.google.common.collect.Maps.uniqueIndex;
+import static com.google.protobuf.util.Durations.add;
+import static com.google.protobuf.util.Durations.compare;
+import static com.google.protobuf.util.Durations.fromSeconds;
 
 @Log
 class Executor {
+
+  private static final Logger logger = Logger.getLogger(Executor.class.getName());
+
   private static final int INCOMPLETE_EXIT_CODE = -1;
 
   private final WorkerContext workerContext;
@@ -425,9 +436,40 @@ class Executor {
       environment.put(environmentVariable.getKey(), environmentVariable.getValue());
     }
 
+    environment.putAll(limits.extraEnvironmentVariables);
+
     // allow debugging before an execution
     if (limits.debugBeforeExecution) {
       return ExecutionDebugger.performBeforeExecutionDebug(processBuilder, limits, resultBuilder);
+    }
+
+    boolean usePersistentWorker = !limits.persistentWorkerKey.isEmpty() &&
+        !limits.persistentWorkerCommand.isEmpty();
+
+    if (usePersistentWorker) {
+      logger.fine("usePersistentWorker; got persistentWorkerCommand of : " + limits.persistentWorkerCommand);
+
+          Tree execTree = workerContext.getQueuedOperation(operationContext.queueEntry).getTree();
+
+          WorkFilesContext filesContext = new WorkFilesContext(
+            execDir,
+            execTree,
+            ImmutableList.copyOf(operationContext.command.getOutputPathsList()),
+            ImmutableList.copyOf(operationContext.command.getOutputFilesList()),
+            ImmutableList.copyOf(operationContext.command.getOutputDirectoriesList()
+          )
+      );
+
+      return PersistentExecutor.runOnPersistentWorker(
+          limits.persistentWorkerCommand,
+          filesContext,
+          operationName,
+          ImmutableList.copyOf(arguments),
+          ImmutableMap.copyOf(environment),
+          limits,
+          timeout,
+          resultBuilder
+      );
     }
 
     // run the action under docker
