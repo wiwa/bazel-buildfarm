@@ -10,7 +10,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 
-// Utility for concurrent move/copy/link of files
+/**
+ * Utility for concurrent move/copy of files
+ * Can be extended in the future to (sym)linking if we need performance
+*/
 public final class FileAccessUtils {
   // singleton class with only static methods
   private FileAccessUtils() {}
@@ -19,7 +22,7 @@ public final class FileAccessUtils {
 
   private static final ConcurrentHashMap<Path, PathLock> fileLocks = new ConcurrentHashMap<>();
 
-  // Used here for locking "files"
+  // Used here as a simple lock for locking "files" (paths)
   private static class PathLock {
     // Not used elsewhere
     private PathLock() {}
@@ -85,37 +88,6 @@ public final class FileAccessUtils {
                 if (!writeable) {
                   return new IOException("moveFile() could not set writeable: " + absTo);
                 }
-                return null;
-              } catch (IOException e) {
-                return e;
-              }
-            });
-    if (ioException != null) {
-      throw ioException;
-    }
-  }
-
-  /**
-   * Creates a symlink, creating necessary directories. Deletes pre-existing files/links which have
-   * the same path as the specified link, effectively overwriting any existing files/links.
-   *
-   * @param from
-   * @param to
-   * @throws IOException
-   */
-  public static void linkFile(Path from, Path to) throws IOException {
-    Path absTo = to.toAbsolutePath();
-    logger.finer("linkFile: " + from + " to " + absTo);
-    if (!Files.exists(from)) {
-      throw new IOException("linkFile: source file doesn't exist: " + from);
-    }
-    IOException ioException =
-        writeFileSafe(
-            absTo,
-            () -> {
-              try {
-                Files.deleteIfExists(absTo);
-                Files.createSymbolicLink(absTo, from);
                 return null;
               } catch (IOException e) {
                 return e;

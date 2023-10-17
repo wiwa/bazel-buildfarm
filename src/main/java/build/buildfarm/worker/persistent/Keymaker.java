@@ -13,6 +13,9 @@ import java.util.SortedMap;
 import persistent.bazel.client.PersistentWorker;
 import persistent.bazel.client.WorkerKey;
 
+/**
+ * Much of the logic (hashing) is from Bazel itself (private library/methods, i.e. WorkerKey).
+ */
 public class Keymaker {
   // Constructs a key with its worker tool input files being relative paths
   public static WorkerKey make(

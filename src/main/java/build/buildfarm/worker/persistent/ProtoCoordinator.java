@@ -22,9 +22,10 @@ import persistent.bazel.client.WorkerKey;
 import persistent.bazel.client.WorkerSupervisor;
 
 /**
- * Responsible for: 1) Initializing a new Worker's file environment correctly 2) pre-request
- * requirements, e.g. ensuring tool input files 3) post-response requirements, i.e. putting output
- * files in the right place
+ * Responsible for:
+ * 1) Initializing a new Worker's file environment correctly
+ * 2) pre-request requirements, e.g. ensuring tool input files
+ * 3) post-response requirements, i.e. putting output files in the right place
  */
 public class ProtoCoordinator extends WorkCoordinator<RequestCtx, ResponseCtx, CommonsWorkerPool> {
   private static final Logger logger = Logger.getLogger(ProtoCoordinator.class.getName());

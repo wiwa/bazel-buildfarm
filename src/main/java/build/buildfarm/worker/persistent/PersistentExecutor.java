@@ -23,16 +23,11 @@ import persistent.bazel.client.WorkerKey;
 /**
  * Executes an Action like Executor/DockerExecutor, writing to ActionResult.
  *
- * <p>Currently has special code for discriminating between Javac/Scalac, and other persistent
+ * Currently has special code for discriminating between Javac/Scalac, and other persistent
  * workers.
  */
 public class PersistentExecutor {
   private static final Logger logger = Logger.getLogger(PersistentExecutor.class.getName());
-
-  // How many workers can exist at once for a given WorkerKey
-  // There may be multiple WorkerKeys per mnemonic,
-  //  e.g. if builds are run with different tool fingerprints
-  private static final int defaultMaxWorkersPerKey = 6;
 
   private static final ProtoCoordinator coordinator =
       ProtoCoordinator.ofCommonsPool(getMaxWorkersPerKey());
@@ -48,6 +43,11 @@ public class PersistentExecutor {
 
   private static final String SCALAC_EXEC_NAME = "Scalac";
   private static final String JAVAC_EXEC_NAME = "JavaBuilder";
+
+    // How many workers can exist at once for a given WorkerKey
+    // There may be multiple WorkerKeys per mnemonic,
+    //  e.g. if builds are run with different tool fingerprints
+    private static final int defaultMaxWorkersPerKey = 6;
 
   private static int getMaxWorkersPerKey() {
     try {
