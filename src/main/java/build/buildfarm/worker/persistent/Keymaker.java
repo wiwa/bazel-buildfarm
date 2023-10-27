@@ -20,6 +20,7 @@ public class Keymaker {
   // Constructs a key with its worker tool input files being relative paths
   public static WorkerKey make(
       Path opRoot,
+      Path workRootsDir,
       ImmutableList<String> workerInitCmd,
       ImmutableList<String> workerInitArgs,
       ImmutableMap<String, String> workerEnv,
@@ -32,7 +33,7 @@ public class Keymaker {
 
     Path workRoot =
         calculateWorkRoot(
-            workerInitCmd, workerInitArgs, workerEnv, executionName, sandboxed, cancellable);
+                workRootsDir, workerInitCmd, workerInitArgs, workerEnv, executionName, sandboxed, cancellable);
     Path toolsRoot = workRoot.resolve(PersistentWorker.TOOL_INPUT_SUBDIR);
 
     SortedMap<Path, HashCode> hashedTools = workerFilesWithHashes(workerFiles);
@@ -52,6 +53,7 @@ public class Keymaker {
 
   // Hash of a subset of the WorkerKey
   private static Path calculateWorkRoot(
+      Path workRootsDir,
       ImmutableList<String> workerInitCmd,
       ImmutableList<String> workerInitArgs,
       ImmutableMap<String, String> workerEnv,
@@ -60,7 +62,7 @@ public class Keymaker {
       boolean cancellable) {
     int workRootId = Objects.hash(workerInitCmd, workerInitArgs, workerEnv, sandboxed, cancellable);
     String workRootDirName = "work-root_" + executionName + "_" + workRootId;
-    return PersistentExecutor.workRootsDir.resolve(workRootDirName);
+    return workRootsDir.resolve(workRootDirName);
   }
 
   private static ImmutableSortedMap<Path, HashCode> workerFilesWithHashes(

@@ -33,9 +33,9 @@ public class PersistentExecutor {
       ProtoCoordinator.ofCommonsPool(getMaxWorkersPerKey());
 
   // TODO load from config (i.e. {worker_root}/persistent)
-  static final Path workRootsDir = Paths.get("/tmp/worker/persistent/");
+  public static final Path defaultWorkRootsDir = Paths.get("/tmp/worker/persistent/");
 
-  static final String PERSISTENT_WORKER_FLAG = "--persistent_worker";
+    public static final String PERSISTENT_WORKER_FLAG = "--persistent_worker";
 
   // TODO Revisit hardcoded actions
   static final String JAVABUILDER_JAR =
@@ -73,6 +73,7 @@ public class PersistentExecutor {
       ImmutableMap<String, String> envVars,
       ResourceLimits limits,
       Duration timeout,
+      Path workRootsDir,
       ActionResult.Builder resultBuilder)
       throws IOException {
     //// Pull out persistent worker start command from the overall action request
@@ -112,7 +113,7 @@ public class PersistentExecutor {
 
     WorkerKey key =
         Keymaker.make(
-            context.opRoot, workerExecCmd, workerInitArgs, env, executionName, workerFiles);
+            context.opRoot, workRootsDir, workerExecCmd, workerInitArgs, env, executionName, workerFiles);
 
     coordinator.copyToolInputsIntoWorkerToolRoot(key, workerFiles);
 

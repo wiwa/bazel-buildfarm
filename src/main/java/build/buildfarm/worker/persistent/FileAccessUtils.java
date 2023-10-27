@@ -1,14 +1,20 @@
 package build.buildfarm.worker.persistent;
 
+import com.google.common.collect.ImmutableSet;
+
 import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Utility for concurrent move/copy of files
@@ -19,6 +25,18 @@ public final class FileAccessUtils {
   private FileAccessUtils() {}
 
   private static final Logger logger = Logger.getLogger(FileAccessUtils.class.getName());
+
+  public static Path addPosixOwnerWrite(Path absPath) throws IOException {
+      Set<PosixFilePermission> perms = Files.getPosixFilePermissions(absPath);
+
+      ImmutableSet<PosixFilePermission> permsWithWrite = ImmutableSet
+              .<PosixFilePermission>builder()
+              .addAll(perms)
+              .add(PosixFilePermission.OWNER_WRITE)
+              .build();
+
+      return Files.setAttribute(absPath, "posix:permissions", permsWithWrite);
+  }
 
   private static final ConcurrentHashMap<Path, PathLock> fileLocks = new ConcurrentHashMap<>();
 
@@ -49,13 +67,10 @@ public final class FileAccessUtils {
             () -> {
               try {
                 Files.copy(from, absTo, REPLACE_EXISTING, COPY_ATTRIBUTES);
-                boolean writeable = absTo.toFile().setWritable(true);
-                if (!writeable) {
-                  return new IOException("copyFile() could not set writeable: " + absTo);
-                }
+                addPosixOwnerWrite(absTo);
                 return null;
               } catch (IOException e) {
-                return e;
+                return new IOException("copyFile() could not set writeable: " + absTo, e);
               }
             });
     if (ioException != null) {
@@ -84,13 +99,10 @@ public final class FileAccessUtils {
             () -> {
               try {
                 Files.move(from, absTo, REPLACE_EXISTING);
-                boolean writeable = absTo.toFile().setWritable(true);
-                if (!writeable) {
-                  return new IOException("moveFile() could not set writeable: " + absTo);
-                }
-                return null;
+                addPosixOwnerWrite(absTo);
+                  return null;
               } catch (IOException e) {
-                return e;
+                  return new IOException("copyFile() could not set writeable: " + absTo, e);
               }
             });
     if (ioException != null) {
