@@ -89,6 +89,10 @@ backplane:
           value: "*"
         - name: "max-cores"
           value: "*"
+        - name: "persistentWorkerKey"
+          value: "*"
+        - name: "persistentWorkerCommand"
+          value: "*"
 worker:
   port: 8981
   publicName: "localhost:8981"
@@ -104,6 +108,11 @@ worker:
   operationPollPeriod: 1
   dequeueMatchSettings:
     allowUnmatched: false
+    properties:
+      - name: "persistentWorkerKey"
+        value: "*"
+      - name: "persistentWorkerCommand"
+        value: "*"
   storages:
     - type: FILESYSTEM
       path: "cache"

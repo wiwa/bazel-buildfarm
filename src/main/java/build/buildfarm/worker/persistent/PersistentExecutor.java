@@ -65,7 +65,18 @@ public class PersistentExecutor {
 
   private static int getMaxWorkersPerKey() {
     try {
-      return Integer.parseInt(System.getenv("BUILDFARM_MAX_WORKERS_PER_KEY"));
+      int maxWorkersPerKey = Integer.parseInt(System.getenv("BUILDFARM_MAX_WORKERS_PER_KEY"));
+      if (maxWorkersPerKey < 1) {
+        log.info(
+            "BUILDFARM_MAX_WORKERS_PER_KEY must be positive; got '"
+                + maxWorkersPerKey
+                + "'; defaulting to "
+                + defaultMaxWorkersPerKey);
+        return defaultMaxWorkersPerKey;
+      } else {
+        log.info("Using BUILDFARM_MAX_WORKERS_PER_KEY=" + maxWorkersPerKey);
+        return maxWorkersPerKey;
+      }
     } catch (Exception ignored) {
       log.info(
           "Could not get env var BUILDFARM_MAX_WORKERS_PER_KEY; defaulting to "
